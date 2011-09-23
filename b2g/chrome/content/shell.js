@@ -11,15 +11,14 @@
  * for the specific language governing rights and limitations under the
  * License.
  *
- * The Original Code is Mozilla Mobile Browser.
+ * The Original Code is B2G.
  *
  * The Initial Developer of the Original Code is
- * Mozilla Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2008
+ * Mozilla Foundation.
+ * Portions created by the Initial Developer are Copyright (C) 2011
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
- *   Mark Finkle <mfinkle@mozilla.com>
  *
  * Alternatively, the contents of this file may be used under the terms of
  * either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -35,13 +34,58 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
-@namespace xul url(http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul);
-@namespace html url(http://www.w3.org/1999/xhtml);
+const Cc = Components.classes;
+const Ci = Components.interfaces;
 
-xul|*:-moz-system-metric(touch-enabled) {
-  cursor: none !important;
-}
+// The default homescreen url to use if there is no B2G_HOMESCREEN
+// environment variable or if it is empty.
+const kDefaultHomeScreen = "file:///data/local/homescreen.html";
 
-html|*:-moz-system-metric(touch-enabled) {
-  cursor: none !important;
-}
+var shell = {
+  get home() {
+    delete this.home;
+    return this.home = document.getElementById("homescreen");
+  },
+  start: function shell_init() {
+    window.controllers.appendController(this);
+
+    let homeSrc = Cc["@mozilla.org/process/environment;1"]
+                    .getService(Ci.nsIEnvironment)
+                    .get("B2G_HOMESCREEN");
+    let browser = this.home;
+    browser.homePage = homeSrc || kDefaultHomeScreen;
+    browser.goHome();
+  },
+
+  stop: function shell_stop() {
+  },
+
+  supportsCommand: function shell_supportsCommand(cmd) {
+    let isSupported = false;
+    switch (cmd) {
+      case "cmd_close":
+        isSupported = true;
+        break;
+      default:
+        isSupported = false;
+        break;
+    }    
+    return isSupported;
+  },
+
+  isCommandEnabled: function shell_isCommandEnabled(cmd) {
+    return true;
+  },
+
+  doCommand: function shell_doCommand(cmd) {
+    switch (cmd) {
+      case "cmd_close":
+        let win = this.home.contentWindow;
+        let evt = win.document.createEvent("UIEvents");
+        evt.initUIEvent("appclose", true, true, win, 1);
+        win.document.dispatchEvent(evt);
+        break;
+    }    
+  }
+};
+

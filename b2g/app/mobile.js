@@ -37,38 +37,9 @@
 
 #filter substitution
 
-// For browser.xml binding
-//
-// cacheRatio* is a ratio that determines the amount of pixels to cache. The
-// ratio is multiplied by the viewport width or height to get the displayport's
-// width or height, respectively.
-//
-// (divide integer value by 1000 to get the ratio)
-//
-// For instance: cachePercentageWidth is 1500
-//               viewport height is 500
-//               => display port height will be 500 * 1.5 = 750
-//
-pref("toolkit.browser.cacheRatioWidth", 2000);
-pref("toolkit.browser.cacheRatioHeight", 3000);
-
-// How long before a content view (a handle to a remote scrollable object)
-// expires.
-pref("toolkit.browser.contentViewExpire", 3000);
-
-pref("toolkit.defaultChromeURI", "chrome://browser/content/browser.xul");
+pref("toolkit.defaultChromeURI", "chrome://browser/content/shell.xul");
 pref("general.useragent.compatMode.firefox", true);
 pref("browser.chromeURL", "chrome://browser/content/");
-
-pref("browser.tabs.warnOnClose", true);
-pref("browser.tabs.remote", true);
-
-pref("toolkit.screen.lock", false);
-
-// From libpref/src/init/all.js, extended to allow a slightly wider zoom range.
-pref("zoom.minPercent", 20);
-pref("zoom.maxPercent", 400);
-pref("toolkit.zoomManager.zoomValues", ".2,.3,.5,.67,.8,.9,1,1.1,1.2,1.33,1.5,1.7,2,2.4,3,4");
 
 // Device pixel to CSS px ratio, in percent. Set to -1 to calculate based on display density.
 pref("browser.viewport.scaleRatio", -1);
@@ -113,9 +84,6 @@ pref("network.http.max-connections", 6);
 pref("network.http.max-connections-per-server", 4);
 pref("network.http.max-persistent-connections-per-server", 4);
 pref("network.http.max-persistent-connections-per-proxy", 4);
-#ifdef MOZ_PLATFORM_MAEMO
-pref("network.autodial-helper.enabled", true);
-#endif
 
 // See bug 545869 for details on why these are set the way they are
 pref("network.buffer.cache.count", 24);
@@ -364,10 +332,6 @@ pref("privacy.item.geolocation", true);
 pref("privacy.item.siteSettings", true);
 pref("privacy.item.syncAccount", true);
 
-#ifdef MOZ_PLATFORM_MAEMO
-pref("plugins.force.wmode", "opaque");
-#endif
-
 // URL to the Learn More link XXX this is the firefox one.  Bug 495578 fixes this.
 pref("browser.geolocation.warning.infoURL", "http://www.mozilla.com/%LOCALE%/firefox/geolocation/");
 
@@ -424,20 +388,8 @@ pref("browser.ui.touch.bottom", 4);
 pref("browser.ui.touch.weight.visited", 120); // percentage
 
 // plugins
-#if MOZ_PLATFORM_MAEMO == 6
-pref("plugin.disable", false);
-#else
 pref("plugin.disable", true);
-#endif
 pref("dom.ipc.plugins.enabled", true);
-
-// process priority
-// higher values give content process less CPU time
-#if MOZ_PLATFORM_MAEMO == 5
-pref("dom.ipc.content.nice", 10);
-#else
-pref("dom.ipc.content.nice", 1);
-#endif
 
 // product URLs
 // The breakpad report server to link to in about:crashes
@@ -527,38 +479,6 @@ pref("app.update.url.details", "http://www.mozilla.com/%LOCALE%/mobile/");
 
 // replace newlines with spaces on paste into single-line text boxes
 pref("editor.singleLine.pasteNewlines", 2);
-
-#ifdef MOZ_PLATFORM_MAEMO
-// update fonts for better readability
-pref("font.default.x-baltic", "SwissA");
-pref("font.default.x-central-euro", "SwissA");
-pref("font.default.x-cyrillic", "SwissA");
-pref("font.default.x-unicode", "SwissA");
-pref("font.default.x-user-def", "SwissA");
-pref("font.default.x-western", "SwissA");
-#endif
-
-#ifdef MOZ_SERVICES_SYNC
-pref("browser.sync.enabled", true);
-
-// sync service
-pref("services.sync.client.type", "mobile");
-pref("services.sync.registerEngines", "Tab,Bookmarks,Form,History,Password,Prefs");
-pref("services.sync.autoconnectDelay", 5);
-
-// prefs to sync by default
-pref("services.sync.prefs.sync.browser.startup.homepage.title", true);
-pref("services.sync.prefs.sync.browser.startup.homepage", true);
-pref("services.sync.prefs.sync.browser.tabs.warnOnClose", true);
-pref("services.sync.prefs.sync.browser.ui.zoom.reflow", true);
-pref("services.sync.prefs.sync.devtools.errorconsole.enabled", true);
-pref("services.sync.prefs.sync.javascript.enabled", true);
-pref("services.sync.prefs.sync.lightweightThemes.isThemeSelected", true);
-pref("services.sync.prefs.sync.lightweightThemes.usedThemes", true);
-pref("services.sync.prefs.sync.network.cookie.cookieBehavior", true);
-pref("services.sync.prefs.sync.permissions.default.image", true);
-pref("services.sync.prefs.sync.signon.rememberSignons", true);
-#endif
 
 // threshold where a tap becomes a drag, in 1/240" reference pixels
 // The names of the preferences are to be in sync with nsEventStateManager.cpp

@@ -38,10 +38,25 @@
    - ***** END LICENSE BLOCK ***** -->
 
 <window xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
-        id="screen"
-        sizemode="fullscreen"
+        id="shell"
         width="480" height="800"
-        style="background: white; overflow: hidden;">
-  <iframe id="home" src="file:///data/local/homescreen.html"
-          style="width: 480px; height: 800px; overflow: hidden;"></iframe>
+#ifdef ANDROID
+        sizemode="fullscreen"
+#endif
+        style="background: black; overflow: hidden;"
+        onload="shell.start();"
+        onunload="shell.stop();">
+
+  <script type="application/javascript" src="chrome://browser/content/commandUtil.js"/>
+  <script type="application/javascript" src="chrome://browser/content/shell.js"/>
+
+  <commandset id="mainCommandSet">
+    <command id="cmd_close" oncommand="CommandUpdater.doCommand(this.id);"/>
+  </commandset>
+
+  <keyset id="mainKeyset">
+    <key id="key_close" keycode="VK_ESCAPE" command="cmd_close"/>
+  </keyset>
+
+  <browser id="homescreen" flex="1" style="overflow: hidden;"/>
 </window>
