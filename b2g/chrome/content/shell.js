@@ -55,6 +55,8 @@ var shell = {
     let browser = this.home;
     browser.homePage = homeSrc || kDefaultHomeScreen;
     browser.goHome();
+
+    let mouseModule = new MouseModule();
   },
 
   stop: function shell_stop() {
@@ -64,6 +66,7 @@ var shell = {
     let isSupported = false;
     switch (cmd) {
       case "cmd_close":
+      case "cmd_resize":
         isSupported = true;
         break;
       default:
@@ -84,6 +87,11 @@ var shell = {
         let evt = win.document.createEvent("UIEvents");
         evt.initUIEvent("appclose", true, true, win, 1);
         win.document.dispatchEvent(evt);
+        break;
+      case "cmd_resize":
+        let width = window.innerWidth;
+        let height = window.innerHeight;
+        window.resizeTo(height, width);
         break;
     }    
   }
