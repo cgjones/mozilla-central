@@ -107,6 +107,7 @@ function MouseModule() {
   this._dragData = new DragData();
 
   this._dragger = null;
+  this._disableKinetic = false; 
   this._inputField = null;
 
   this._downUpEvents = [];
@@ -153,7 +154,7 @@ MouseModule.prototype = {
             this._onMouseDown(aEvent);
             break;
           case "mousemove":
-            if (!this._targetScrollbox)
+            if (!this._dragger || !this._targetScrollbox)
               break;
 
             aEvent.stopPropagation();
@@ -161,6 +162,9 @@ MouseModule.prototype = {
             this._onMouseMove(aEvent);
             break;
           case "mouseup":
+            if (!this._dragger || !this._targetScrollbox)
+              break;
+
             this._onMouseUp(aEvent);
             break;
           case "click":
@@ -238,11 +242,13 @@ MouseModule.prototype = {
     }
 
     // Do pan
+    this._kineticEnable = false;
     if (dragger) {
       let draggable = dragger.isDraggable(targetScrollbox, targetScrollInterface);
       dragData.locked = !draggable.x || !draggable.y;
       if (draggable.x || draggable.y) {
         this._dragger = dragger;
+        this._kineticEnable !== false;
         this._doDragStart(aEvent, draggable);
       }
     }
@@ -278,7 +284,8 @@ MouseModule.prototype = {
 
       let success = target.dispatchEvent(event);
       if (!success) {
-        this._cleanClickBuffer();
+        this._kineticEnable ? this._cleanClickBuffer()
+                            : this.cancelPending();
       } else {
         this._recordEvent(aEvent);
         let commitToClicker = isClick && (this._downUpEvents.length > 1);
@@ -286,8 +293,8 @@ MouseModule.prototype = {
           // commit this click to the doubleclick timewait buffer
           this._commitAnotherClick();
         else
-          // clean the click buffer ourselves
-          this._cleanClickBuffer();
+          this._kineticEnable ? this._cleanClickBuffer()
+                              : this.cancelPending();
       }
     }
 
@@ -484,7 +491,8 @@ MouseModule.prototype = {
   /** Endpoint of _commitAnotherClick().  Finalize a single tap.  */
   _doSingleClick: function _doSingleClick() {
     let mouseUp = this._downUpEvents[1];
-    this._cleanClickBuffer();
+    this._kineticEnable ? this._cleanClickBuffer()
+                        : this.cancelPending();
     this._dispatchTap("TapSingle", mouseUp);
   },
 
