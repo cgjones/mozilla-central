@@ -89,15 +89,15 @@ const kMaxVelocity = 6;
  * following interface:  (The `scroller' argument is given for convenience, and
  * is the object reference to the element's scrollbox object).
  *
- *   dragStart(cX, cY, target, scroller)
+ *   onTouchStart(cX, cY, target, scroller)
  *     Signals the beginning of a drag.  Coordinates are passed as
  *     client coordinates. target is copied from the event.
  *
- *   dragStop(dx, dy, scroller)
+ *   onTouchEnd(dx, dy, scroller)
  *     Signals the end of a drag.  The dx, dy parameters may be non-zero to
  *     indicate one last drag movement.
  *
- *   dragMove(dx, dy, scroller, isKinetic)
+ *   onTouchMove(dx, dy, scroller, isKinetic)
  *     Signals an input attempt to drag by dx, dy.
  *
  * There is a default dragger in case a scrollable element is dragged --- see
@@ -244,7 +244,7 @@ MouseModule.prototype = {
     // Do pan
     this._kineticEnable = false;
     if (dragger) {
-      let draggable = dragger.isDraggable(targetScrollbox, targetScrollInterface);
+      let draggable = dragger.isPannable(targetScrollbox, targetScrollInterface);
       dragData.locked = !draggable.x || !draggable.y;
       if (draggable.x || draggable.y) {
         this._dragger = dragger;
@@ -391,7 +391,7 @@ MouseModule.prototype = {
     this._kinetic.addData(0, 0);
     this._dragStartTime = Date.now();
     if (!this._kinetic.isActive())
-      this._dragger.dragStart(aEvent.clientX, aEvent.clientY, aEvent.target, this._targetScrollInterface);
+      this._dragger.onTouchStart(aEvent.clientX, aEvent.clientY, aEvent.target, this._targetScrollInterface);
   },
 
   /** Finish a drag. */
@@ -413,7 +413,7 @@ MouseModule.prototype = {
       this._kinetic.start();
     } else {
       this._kinetic.end();
-      this._dragger.dragStop(0, 0, this._targetScrollInterface);
+      this._dragger.onTouchEnd(0, 0, this._targetScrollInterface);
       this._dragger = null;
     }
   },
@@ -422,14 +422,14 @@ MouseModule.prototype = {
    * Used by _onMouseMove() above and by KineticController's timer to do the
    * actual dragMove signalling to the dragger.  We'd put this in _onMouseMove()
    * but then KineticController would be adding to its own data as it signals
-   * the dragger of dragMove()s.
+   * the dragger of onTouchMove()s.
    */
   _dragBy: function _dragBy(dX, dY, aIsKinetic) {
     let dragged = true;
     let dragData = this._dragData;
     if (!this._waitingForPaint || aIsKinetic) {
       let dragData = this._dragData;
-      dragged = this._dragger.dragMove(dX, dY, this._targetScrollInterface, aIsKinetic);
+      dragged = this._dragger.onTouchMove(dX, dY, this._targetScrollInterface, aIsKinetic);
       if (dragged && !this._waitingForPaint) {
         this._waitingForPaint = true;
         mozRequestAnimationFrame(this);
@@ -449,7 +449,7 @@ MouseModule.prototype = {
     // the pan just yet.
     let dragData = this._dragData;
     if (!dragData.dragging) {
-      this._dragger.dragStop(0, 0, this._targetScrollInterface);
+      this._dragger.onTouchEnd(0, 0, this._targetScrollInterface);
       this._dragger = null;
 
       let target = this._targetScrollbox;
@@ -663,19 +663,19 @@ var ScrollUtils = {
 
   _createScrollBox: function(win) {
     return {
-      isDraggable: function isDraggable(target, scroller) {
+      isPannable: function isPannable(target, scroller) {
         return { x: true, y: true }; 
       },
 
-      dragStart: function dragStart(cx, cy, target, scroller) {
+      onTouchStart: function onTouchStart(cx, cy, target, scroller) {
         win.document.addEventListener("PanBegin", this._showScrollbars, false);
       },
 
-      dragStop: function dragStop(dx, dy, scroller) {
+      onTouchEnd: function onTouchEnd(dx, dy, scroller) {
         win.document.removeEventListener("PanBegin", this._showScrollbars, false);
       },
 
-      dragMove: function dragMove(dx, dy, scroller) {
+      onTouchMove: function onTouchMove(dx, dy, scroller) {
         let oldX = win.scrollX, oldY = win.scrollY;
         win.scrollBy(dx, dy);
         let newX = win.scrollX, newY = win.scrollY;
@@ -700,19 +700,19 @@ var ScrollUtils = {
   },
   _createDivScrollBox: function(div) {
     return {
-      isDraggable: function isDraggable(target, scroller) {
+      isPannable: function isPannable(target, scroller) {
         return { x: true, y: true }; 
       },
 
-      dragStart: function dragStart(cx, cy, target, scroller) {
+      onTouchStart: function onTouchStart(cx, cy, target, scroller) {
         div.setAttribute("panning", true);
       },
 
-      dragStop: function dragStop(dx, dy, scroller) {
+      onTouchEnd: function onTouchEnd(dx, dy, scroller) {
         div.removeAttribute("panning");
       },
 
-      dragMove: function dragMove(dx, dy, scroller) {
+      onTouchMove: function onTouchMove(dx, dy, scroller) {
         let oldX = div.scrollLeft, oldY = div.scrollTop;
         div.scrollLeft += dx;
         div.scrollTop += dy;
@@ -734,7 +734,7 @@ var ScrollUtils = {
    * regular scrollBy calls on the scroller.
    */
   _defaultDragger: {
-    isDraggable: function isDraggable(target, scroller) {
+    isPannable: function isPannable(target, scroller) {
       let sX = {}, sY = {},
           pX = {}, pY = {};
       scroller.getPosition(pX, pY);
@@ -744,16 +744,16 @@ var ScrollUtils = {
                y: (sY.value > rect.height || pY.value != 0) };
     },
 
-    dragStart: function dragStart(cx, cy, target, scroller) {
+    onTouchStart: function onTouchStart(cx, cy, target, scroller) {
       scroller.element.addEventListener("PanBegin", this._showScrollbars, false);
     },
 
-    dragStop: function dragStop(dx, dy, scroller) {
+    onTouchEnd: function onTouchEnd(dx, dy, scroller) {
       scroller.element.removeEventListener("PanBegin", this._showScrollbars, false);
-      return this.dragMove(dx, dy, scroller);
+      return this.onTouchMove(dx, dy, scroller);
     },
 
-    dragMove: function dragMove(dx, dy, scroller) {
+    onTouchMove: function onTouchMove(dx, dy, scroller) {
       if (scroller.getPosition) {
         try {
           let oldX = {}, oldY = {};
