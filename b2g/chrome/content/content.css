@@ -1,0 +1,80 @@
+
+@namespace url("http://www.w3.org/1999/xhtml");
+@namespace xul url("http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul");
+
+/* Style the scrollbars */
+xul|window xul|scrollbar {
+  display: none;
+}
+
+xul|window html xul|scrollbar {
+  display: block;
+}
+
+xul|scrollbar[orient="vertical"] {
+  -moz-appearance: none !important;
+  position: relative;
+  opacity: 0;
+  margin-left: -8px;
+  min-width: 8px;
+  background-color: transparent !important;
+  background-image: none !important;
+  border: 0px solid transparent !important;
+}
+
+xul|scrollbar[orient="vertical"]:-moz-locale-dir(rtl) {
+  margin-left: 2px;
+  margin-right: -10px;
+}
+
+xul|scrollbar[orient="vertical"] xul|thumb {
+  max-width: 6px !important;
+  min-width: 6px !important;
+}
+
+xul|scrollbar[orient="horizontal"] {
+  -moz-appearance: none !important;
+  position: relative;
+  opacity: 0;
+  min-height: 8px;
+  margin-top: -8px;
+  background-color: transparent !important;
+  background-image: none !important;
+  border: 0px solid transparent !important;
+}
+
+xul|scrollbar[orient="horizontal"] xul|thumb {
+  max-height: 6px !important;
+  min-height: 6px !important;
+}
+
+xul|scrollbox {
+  overflow-y: scroll;
+  overflow-x: scroll;
+}
+
+xul|scrollbarbutton {
+  min-height: 8px !important;
+  min-width: 8px !important;
+  -moz-appearance: none !important;
+  visibility: hidden;
+}
+
+*|*[panning] xul|scrollbar {
+  opacity: 1 !important;
+}
+
+xul|scrollbarbutton[sbattr="scrollbar-up-top"],
+xul|scrollbarbutton[sbattr="scrollbar-bottom-top"] {
+  display: none;
+}
+
+xul|thumb {
+  background-color: rgba(0, 0, 0, 0.4) !important;
+  -moz-border-top-colors: none !important;
+  -moz-border-bottom-colors: none !important;
+  -moz-border-right-colors: none !important;
+  -moz-border-left-colors: none !important;
+  border: 1px solid rgba(255, 255, 255, 0.4) !important;
+  -moz-border-radius: 3px;
+}

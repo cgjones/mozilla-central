@@ -112,7 +112,7 @@
 #endif
 
 ; [Components]
-@BINPATH@/components/components.manifest
+@BINPATH@/components/B2GComponents.manifest
 @BINPATH@/components/alerts.xpt
 #ifdef ACCESSIBILITY
 #ifdef XP_WIN32
@@ -144,6 +144,7 @@
 @BINPATH@/components/directory.xpt
 @BINPATH@/components/docshell.xpt
 @BINPATH@/components/dom.xpt
+@BINPATH@/components/dom_webapi.xpt
 @BINPATH@/components/dom_base.xpt
 @BINPATH@/components/dom_canvas.xpt
 @BINPATH@/components/dom_core.xpt
@@ -582,37 +583,8 @@ bin/components/@DLL_PREFIX@nkgnomevfs@DLL_SUFFIX@
 @BINPATH@/MozSounds.cmd
 #endif
 
-[mobile]
+; [B2G]
 @BINPATH@/chrome/icons/
 @BINPATH@/chrome/chrome@JAREXT@
 @BINPATH@/chrome/chrome.manifest
-@BINPATH@/components/AboutRedirector.js
-@BINPATH@/components/AddonUpdateService.js
-@BINPATH@/components/AlertsService.js
-@BINPATH@/components/AutoCompleteCache.js
-@BINPATH@/components/BlocklistPrompt.js
-@BINPATH@/components/BrowserCLH.js
-@BINPATH@/components/BrowserStartup.js
-@BINPATH@/components/ContentDispatchChooser.js
-@BINPATH@/components/ContentPermissionPrompt.js
-@BINPATH@/components/DirectoryProvider.js
-@BINPATH@/components/DownloadManagerUI.js
-@BINPATH@/components/FormAutoComplete.js
-@BINPATH@/components/HelperAppDialog.js
-@BINPATH@/components/LoginManager.js
-@BINPATH@/components/LoginManagerPrompter.js
-@BINPATH@/components/MobileComponents.manifest
-@BINPATH@/components/MobileComponents.xpt
-@BINPATH@/components/PromptService.js
-@BINPATH@/components/SessionStore.js
-@BINPATH@/components/Sidebar.js
-#ifdef MOZ_SAFE_BROWSING
-@BINPATH@/components/SafeBrowsing.js
-#endif
-#ifdef MOZ_UPDATER
-@BINPATH@/components/UpdatePrompt.js
-#endif
-@BINPATH@/components/WebappsSupport.js
-@BINPATH@/components/XPIDialogService.js
-@BINPATH@/components/browsercomps.xpt
-@BINPATH@/extensions/feedback@mobile.mozilla.org.xpi
+@BINPATH@/components/B2GComponents.manifest

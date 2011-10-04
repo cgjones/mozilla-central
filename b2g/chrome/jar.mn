@@ -6,7 +6,7 @@ chrome.jar:
 
 * content/shell.xul                     (content/shell.xul)
   content/shell.js                      (content/shell.js)
-  content/shell.js                      (content/shell.js)
+  content/content.css                   (content/content.css)
   content/commandUtil.js                (content/commandUtil.js)
 
 % override chrome://global/content/netError.xhtml chrome://browser/content/netError.xhtml

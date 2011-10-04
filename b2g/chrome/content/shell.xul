@@ -52,11 +52,13 @@
 
   <commandset id="mainCommandSet">
     <command id="cmd_close" oncommand="CommandUpdater.doCommand(this.id);"/>
+    <command id="cmd_resize" oncommand="CommandUpdater.doCommand(this.id);"/>
   </commandset>
 
   <keyset id="mainKeyset">
     <key id="key_close" keycode="VK_ESCAPE" command="cmd_close"/>
+    <key id="key_resize" key="Q" modifiers="shift" command="cmd_resize"/>
   </keyset>
 
-  <browser id="homescreen" flex="1" style="overflow: hidden;"/>
+  <browser id="homescreen" type="content" flex="1" style="overflow: hidden;"/>
 </window>
