@@ -55,8 +55,6 @@ var shell = {
     let browser = this.home;
     browser.homePage = homeSrc || kDefaultHomeScreen;
     browser.goHome();
-
-    let mouseModule = new MouseModule();
   },
 
   stop: function shell_stop() {

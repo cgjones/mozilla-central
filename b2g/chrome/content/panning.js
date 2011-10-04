@@ -40,12 +40,17 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
-Components.utils.import("resource://gre/modules/Geometry.jsm");
-Components.utils.import("resource://gre/modules/Services.jsm");
-Components.utils.import("resource://gre/modules/XPCOMUtils.jsm");
+// threshold where a tap becomes a drag, in 1/240" reference pixels
+// If this value is different from the value defined in nsEventStateManager.cpp
+// it can result into unexpected result where dragging does not mean
+// there will be any clicking
+const kDragThreshold = 25;
 
-XPCOMUtils.defineLazyServiceGetter(this, "gFocusManager",
-  "@mozilla.org/focus-manager;1", "nsIFocusManager");
+// kinetic tweakables
+const kKineticUpdateInterval = 16;
+const kKineticExponentialC = 1400;
+const kKineticPolynomialC = 100;
+const kKineticSwipeLength = 160;
 
 // Maximum delay in ms between the two taps of a double-tap
 const kDoubleClickInterval = 400;
@@ -121,7 +126,7 @@ function MouseModule() {
   this._mouseOverTimeout = new Util.Timeout(this._doMouseOver.bind(this));
   this._longClickTimeout = new Util.Timeout(this._doLongClick.bind(this));
 
-  this._doubleClickRadius = Util.displayDPI * kDoubleClickRadius;
+  this._doubleClickRadius = ScrollUtils.displayDPI * kDoubleClickRadius;
 
   window.addEventListener("mousedown", this, true);
   window.addEventListener("mousemove", this, true);
@@ -164,7 +169,6 @@ MouseModule.prototype = {
           case "mouseup":
             if (!this._dragger || !this._targetScrollbox)
               break;
-
             this._onMouseUp(aEvent);
             break;
           case "click":
@@ -460,7 +464,7 @@ MouseModule.prototype = {
     }
   },
 
-  /** Called when tap down times is long enought to generate a mousemove **/
+  /** Called when tap down times is long enough to generate a mousemove **/
   _doMouseOver: function _doMouseOver() {
     let ev = this._downUpEvents[0];
     this._dispatchTap("TapOver", ev);
@@ -582,60 +586,38 @@ MouseModule.prototype = {
 var ScrollUtils = {
   // threshold in pixels for sensing a tap as opposed to a pan
   get tapRadius() {
-    let dpi = Util.displayDPI;
+    let dpi = ScrollUtils.displayDPI;
 
     delete this.tapRadius;
-    return this.tapRadius = Services.prefs.getIntPref("ui.dragThresholdX") / 240 * dpi;
+    return this.tapRadius = kDragThreshold / 240 * dpi;
   },
 
-  /**
-   * Walk up (parentward) the DOM tree from elem in search of a scrollable element.
-   * Return the element and its scroll interface if one is found, two nulls otherwise.
-   *
-   * This function will cache the pointer to the scroll interface on the element itself,
-   * so it is safe to call it many times without incurring the same XPConnect overhead
-   * as in the initial call.
-   */
+  get displayDPI() {
+    var ruler = document.createElement("div");
+    ruler.style.minWidth = "1in";
+    ruler.style.maxWidth = "1in";
+    ruler.style.position = "absolute";
+    ruler.style.left = "-2in";
+    document.documentElement.appendChild(ruler);
+    var displayDPI = ruler.getBoundingClientRect().width;
+    document.documentElement.removeChild(ruler);
+
+    delete this.displayDPI;
+    return this.displayDPI = displayDPI;
+  },
+
   getScrollboxFromElement: function getScrollboxFromElement(elem) {
     let scrollbox = null;
     let qinterface = null;
     let scroller = null;
 
-    if (elem instanceof HTMLElement && elem.tagName != "HTML") {
-      var baseElement = elem;
-      for (; elem; elem = elem.parentNode) {
-        if (elem.customDragger)
-          return [elem, qinterface, elem.customDragger];
-      }
-
-      [scrollbox, scroller] = this._getScrollableHTMLElement(baseElement);
-      return [scrollbox, qinterface, scroller];
-    }
-
+    var baseElement = elem;
     for (; elem; elem = elem.parentNode) {
-      try {
-        if (elem.scrollBoxObject) {
-          scrollbox = elem;
-          qinterface = elem.scrollBoxObject;
-          break;
-        } else if (elem.customDragger) {
-          scrollbox = elem;
-          break;
-        } else if (elem.boxObject) {
-          let qi = (elem._cachedSBO) ? elem._cachedSBO
-                                     : elem.boxObject.QueryInterface(Ci.nsIScrollBoxObject);
-          if (qi) {
-            scrollbox = elem;
-            scrollbox._cachedSBO = qinterface = qi;
-            break;
-          }
-        }
-      } catch (e) { /* we aren't here to deal with your exceptions, we'll just keep
-                       traversing until we find something more well-behaved, as we
-                       prefer default behaviour to whiny scrollers. */
-      }
+      if (elem.customDragger)
+        return [elem, qinterface, elem.customDragger];
     }
-    scroller = (scrollbox ? (scrollbox.customDragger || this._defaultDragger) : null);
+
+    [scrollbox, scroller] = this._getScrollableHTMLElement(baseElement);
     return [scrollbox, qinterface, scroller];
   },
 
@@ -726,66 +708,6 @@ var ScrollUtils = {
   isPan: function isPan(aPoint, aPoint2) {
     return (Math.abs(aPoint.x - aPoint2.x) > this.tapRadius ||
             Math.abs(aPoint.y - aPoint2.y) > this.tapRadius);
-  },
-
-  /**
-   * The default dragger object used by MouseModule when dragging a scrollable
-   * element that provides no customDragger.  Simply performs the expected
-   * regular scrollBy calls on the scroller.
-   */
-  _defaultDragger: {
-    isPannable: function isPannable(target, scroller) {
-      let sX = {}, sY = {},
-          pX = {}, pY = {};
-      scroller.getPosition(pX, pY);
-      scroller.getScrolledSize(sX, sY);
-      let rect = target.getBoundingClientRect();
-      return { x: (sX.value > rect.width  || pX.value != 0),
-               y: (sY.value > rect.height || pY.value != 0) };
-    },
-
-    onTouchStart: function onTouchStart(cx, cy, target, scroller) {
-      scroller.element.addEventListener("PanBegin", this._showScrollbars, false);
-    },
-
-    onTouchEnd: function onTouchEnd(dx, dy, scroller) {
-      scroller.element.removeEventListener("PanBegin", this._showScrollbars, false);
-      return this.onTouchMove(dx, dy, scroller);
-    },
-
-    onTouchMove: function onTouchMove(dx, dy, scroller) {
-      if (scroller.getPosition) {
-        try {
-          let oldX = {}, oldY = {};
-          scroller.getPosition(oldX, oldY);
-
-          scroller.scrollBy(dx, dy);
-
-          let newX = {}, newY = {};
-          scroller.getPosition(newX, newY);
-
-          return (newX.value != oldX.value) || (newY.value != oldY.value);
-
-        } catch (e) { /* we have no time for whiny scrollers! */ }
-      }
-
-      return false;
-    },
-
-    _showScrollbars: function _showScrollbars(aEvent) {
-      let scrollbox = aEvent.target;
-      scrollbox.setAttribute("panning", "true");
-
-      let hideScrollbars = function() {
-        scrollbox.removeEventListener("PanFinished", hideScrollbars, false);
-        scrollbox.removeEventListener("CancelTouchSequence", hideScrollbars, false);
-        scrollbox.removeAttribute("panning");
-      }
-
-      // Wait for panning to be completely finished before removing scrollbars
-      scrollbox.addEventListener("PanFinished", hideScrollbars, false);
-      scrollbox.addEventListener("CancelTouchSequence", hideScrollbars, false);
-    }
   }
 };
 
@@ -794,8 +716,7 @@ var ScrollUtils = {
  * locking of movement on one axis, and click detection.
  */
 function DragData() {
-  this._domUtils = Cc["@mozilla.org/inspector/dom-utils;1"].getService(Ci.inIDOMUtils);
-  this._lockRevertThreshold = Util.displayDPI * kAxisLockRevertThreshold;
+  this._lockRevertThreshold = ScrollUtils.displayDPI * kAxisLockRevertThreshold;
   this.reset();
 };
 
@@ -920,10 +841,9 @@ DragData.prototype = {
 
   _resetActive: function _resetActive() {
     // dismiss the active state of the pan element
-    let activeWindow = shell.home.contentWindow;
-    let target = activeWindow.document.documentElement;
-    let state = this._domUtils.getContentState(target);
-    this._domUtils.setContentState(target, state & kStateActive);
+    var targetDocument = shell.home.contentWindow.document;
+    let target = targetDocument.getElementById("activeHandler");
+    target.setCapture();
   },
 
   toString: function toString() {
@@ -931,6 +851,38 @@ DragData.prototype = {
   }
 };
 
+var Point = function(x, y) {
+  this.x = x;
+  this.y = y;
+};
+
+Point.prototype = {
+  add: function remove(dx, dy) {
+    this.x += dx;
+    this.y += dy;
+  },
+
+  set: function set(x, y) {
+    this.x = x;
+    this.y = y;
+  },
+
+  scale: function scale(s) {
+    this.x *= s;
+    this.y *= s;
+    return this;
+  },
+
+  map: function map(func) {
+    this.x = func.call(this, this.x);
+    this.y = func.call(this, this.y);
+    return this;
+  },
+
+  toString: function toString() {
+    return "(" + this.x + "," + this.y + ")";
+  }
+};
 
 /**
  * KineticController - a class to take drag position data and use it
@@ -948,22 +900,27 @@ function KineticController(aPanBy, aEndCallback) {
   this._panBy = aPanBy;
   this._beforeEnd = aEndCallback;
 
-  // These are used to calculate the position of the scroll panes during kinetic panning. Think of
-  // these points as vectors that are added together and multiplied by scalars.
+  // These are used to calculate the position of the scroll panes
+  // during kinetic panning. Think of these points as vectors that
+  // are added together and multiplied by scalars.
   this._position = new Point(0, 0);
   this._velocity = new Point(0, 0);
   this._acceleration = new Point(0, 0);
   this._time = 0;
   this._timeStart = 0;
 
-  // How often do we change the position of the scroll pane?  Too often and panning may jerk near
-  // the end. Too little and panning will be choppy. In milliseconds.
-  this._updateInterval = Services.prefs.getIntPref("browser.ui.kinetic.updateInterval");
+  // How often do we change the position of the scroll pane?
+  // Too often and panning may jerk near the end.
+  // Too little and panning will be choppy. In milliseconds.
+  this._updateInterval = kKineticUpdateInterval;
+
   // Constants that affect the "friction" of the scroll pane.
-  this._exponentialC = Services.prefs.getIntPref("browser.ui.kinetic.exponentialC");
-  this._polynomialC = Services.prefs.getIntPref("browser.ui.kinetic.polynomialC") / 1000000;
-  // Number of milliseconds that can contain a swipe. Movements earlier than this are disregarded.
-  this._swipeLength = Services.prefs.getIntPref("browser.ui.kinetic.swipeLength");
+  this._exponentialC = kKineticExponentialC;
+  this._polynomialC = kKineticPolynomialC;
+
+  // Number of milliseconds that can contain a swipe.
+  // Movements earlier than this are disregarded.
+  this._swipeLength = kKineticSwipeLength;
 
   this._reset();
 }
@@ -1120,7 +1077,8 @@ KineticController.prototype = {
       this._velocity.y = 0;
 
     // Set acceleration vector to opposite signs of velocity
-    this._acceleration.set(this._velocity.clone().map(sign).scale(-this._polynomialC));
+    var velocityClone = new Point(this._velocity.x, this._velocity.y);
+    this._acceleration.set(velocityClone.map(sign).scale(-this._polynomialC));
 
     this._position.set(0, 0);
     this._initialTime = mozAnimationStartTime;
@@ -1159,79 +1117,46 @@ KineticController.prototype = {
   }
 };
 
-
-let Util = {
-  get displayDPI() {
-    delete this.displayDPI;
-    return this.displayDPI = window.QueryInterface(Ci.nsIInterfaceRequestor)
-                                   .getInterface(Ci.nsIDOMWindowUtils)
-                                   .displayDPI;
-  }
-}
-
 /*
  * Helper class to nsITimer that adds a little more pizazz.  Callback can be an
  * object with a notify method or a function.
  */
+var Util = {};
 Util.Timeout = function(aCallback) {
   this._callback = aCallback;
-  this._timer = Cc["@mozilla.org/timer;1"].createInstance(Ci.nsITimer);
-  this._type = null;
+  this._timeout = 0;
 };
 
 Util.Timeout.prototype = {
   /** Timer callback. Don't call this manually. */
   notify: function notify() {
-    if (this._type == this._timer.TYPE_ONE_SHOT)
-      this._type = null;
-
-    if (this._callback.notify)
-      this._callback.notify();
-    else
-      this._callback.apply(null);
+    this._callback.apply(null);
   },
 
   /** Helper function for once and interval. */
-  _start: function _start(aDelay, aType, aCallback) {
-    if (aCallback)
-      this._callback = aCallback;
+  _start: function _start(aCallback, aDelay) {
     this.clear();
-    this._timer.initWithCallback(this, aDelay, aType);
-    this._type = aType;
+    this._timeout = window.setTimeout(aCallback, aDelay);
     return this;
   },
 
   /** Do the callback once.  Cancels other timeouts on this object. */
   once: function once(aDelay, aCallback) {
-    return this._start(aDelay, this._timer.TYPE_ONE_SHOT, aCallback);
-  },
-
-  /** Do the callback every aDelay msecs. Cancels other timeouts on this object. */
-  interval: function interval(aDelay, aCallback) {
-    return this._start(aDelay, this._timer.TYPE_REPEATING_SLACK, aCallback);
+    return this._start(aCallback || this._callback, aDelay);
   },
 
   /** Clear any pending timeouts. */
   clear: function clear() {
     if (this.isPending()) {
-      this._timer.cancel();
-      this._type = null;
+      window.clearTimeout(this._timeout);
+      this._timeout = 0;
     }
     return this;
   },
 
-  /** If there is a pending timeout, call it and cancel the timeout. */
-  flush: function flush() {
-    if (this.isPending()) {
-      this.notify();
-      this.clear();
-    }
-    return this;
-  },
-
-  /** Return true iff we are waiting for a callback. */
+  /** Return true if we are waiting for a callback. */
   isPending: function isPending() {
-    return this._type !== null;
+    return this._timeout != 0;
   }
 };
 

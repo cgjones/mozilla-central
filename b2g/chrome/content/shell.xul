@@ -47,7 +47,6 @@
         onload="shell.start();"
         onunload="shell.stop();">
 
-  <script type="application/javascript" src="chrome://browser/content/panning.js"/>
   <script type="application/javascript" src="chrome://browser/content/commandUtil.js"/>
   <script type="application/javascript" src="chrome://browser/content/shell.js"/>
 
@@ -61,5 +60,5 @@
     <key id="key_resize" key="Q" modifiers="shift" command="cmd_resize"/>
   </keyset>
 
-  <browser id="homescreen" flex="1" style="overflow: hidden;"/>
+  <browser id="homescreen" type="content" flex="1" style="overflow: hidden;"/>
 </window>
