@@ -58,5 +58,5 @@
     <key id="key_close" keycode="VK_ESCAPE" command="cmd_close"/>
   </keyset>
 
-  <browser id="homescreen" flex="1" style="overflow: hidden;"/>
+  <browser id="homescreen" type="content-primary" flex="1" style="overflow: hidden;"/>
 </window>
