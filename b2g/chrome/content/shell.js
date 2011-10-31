@@ -68,6 +68,10 @@ var shell = {
   start: function shell_init() {
     window.controllers.appendController(this);
 
+    let ioService = Cc["@mozilla.org/network/io-service;1"]
+                      .getService(Ci.nsIIOService2);
+    ioService.offline = false;
+
     let browser = this.home;
     browser.homePage = this.homeSrc;
     browser.goHome();
