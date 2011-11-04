@@ -49,6 +49,7 @@
 
   <script type="application/javascript" src="chrome://browser/content/commandUtil.js"/>
   <script type="application/javascript" src="chrome://browser/content/shell.js"/>
+  <script type="application/javascript" src="chrome://browser/content/touch.js"/>
 
   <commandset id="mainCommandSet">
     <command id="cmd_close" oncommand="CommandUpdater.doCommand(this.id);"/>
