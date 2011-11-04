@@ -45,15 +45,8 @@ b2g/app/profile/extensions/Makefile
 $MOZ_BRANDING_DIRECTORY/Makefile
 $MOZ_BRANDING_DIRECTORY/locales/Makefile
 b2g/chrome/Makefile
-b2g/chrome/tests/Makefile
-b2g/components/Makefile
-b2g/components/build/Makefile
-b2g/modules/Makefile
 b2g/installer/Makefile
-b2g/locales/Makefile
-b2g/Makefile
-b2g/themes/Makefile
-b2g/themes/core/Makefile"
+b2g/Makefile"
 
 if test -n "$MOZ_UPDATE_PACKAGING"; then
    add_makefiles "

@@ -203,8 +203,6 @@ pref("accessibility.typeaheadfind.timeout", 5000);
 pref("accessibility.typeaheadfind.flashBar", 1);
 pref("accessibility.typeaheadfind.linksonly", false);
 pref("accessibility.typeaheadfind.casesensitive", 0);
-// zoom key(F7) conflicts with caret browsing on maemo
-pref("accessibility.browsewithcaret_shortcut.enabled", false);
 
 // Whether or not we show a dialog box informing the user that the update was
 // successfully applied.

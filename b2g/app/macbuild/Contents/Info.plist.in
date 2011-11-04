@@ -29,7 +29,7 @@
 		<dict>
 			<key>CFBundleTypeExtensions</key>
 			<array>
-			    <string>text</string>
+			  <string>text</string>
 				<string>txt</string>
 				<string>js</string>
 				<string>log</string>
@@ -72,15 +72,15 @@
 		</dict>
 	</array>
 	<key>CFBundleExecutable</key>
-	<string>fennec</string>
+	<string>%MOZ_APP_NAME%</string>
 	<key>CFBundleGetInfoString</key>
 	<string>%APP_NAME% %APP_VERSION%</string>
 	<key>CFBundleIconFile</key>
-	<string>fennec</string>
+	<string>%MOZ_APP_NAME%</string>
 	<key>CFBundleIdentifier</key>
-	<string>org.mozilla.fennec</string>
+	<string>org.mozilla.b2g</string>
 	<key>CFBundleInfoDictionaryVersion</key>
-	<string>6.0</string>
+	<string>%MOZ_APP_VERSION%</string>
 	<key>CFBundleName</key>
 	<string>%APP_NAME%</string>
 	<key>CFBundlePackageType</key>

@@ -38,7 +38,7 @@
 MOZ_APP_NAME=b2g
 MOZ_APP_UA_NAME=B2G
 
-MOZ_APP_VERSION=9.0a1
+MOZ_APP_VERSION=10.0a1
 
 MOZ_BRANDING_DIRECTORY=b2g/branding/unofficial
 MOZ_OFFICIAL_BRANDING_DIRECTORY=b2g/branding/official
@@ -49,6 +49,9 @@ MOZ_SERVICES_SYNC=1
 
 MOZ_DISABLE_DOMCRYPTO=1
 
+# use custom widget for html:select
+MOZ_USE_NATIVE_POPUP_WINDOWS=1
+
 if test "$LIBXUL_SDK"; then
 MOZ_XULRUNNER=1
 else
@@ -56,9 +59,3 @@ MOZ_XULRUNNER=
 MOZ_PLACES=1
 fi
 
-# Needed for building our components as part of libxul
-MOZ_APP_COMPONENT_LIBS="browsercomps"
-MOZ_APP_COMPONENT_INCLUDE=nsBrowserComponents.h
-
-# use custom widget for html:select
-MOZ_USE_NATIVE_POPUP_WINDOWS=1

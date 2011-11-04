@@ -1,4 +1,4 @@
-; Package file for the Fennec build. 
+; Package file for the B2G build. 
 ;
 ; File format:
 ;
@@ -16,25 +16,6 @@
 @APPNAME@/Contents/PkgInfo
 @APPNAME@/Contents/Plug-Ins/
 @APPNAME@/Contents/Resources/
-#endif
-
-[@AB_CD@]
-@BINPATH@/chrome/@AB_CD@@JAREXT@
-@BINPATH@/chrome/@AB_CD@.manifest
-@BINPATH@/@PREF_DIR@/mobile-l10n.js
-@BINPATH@/searchplugins/*
-@BINPATH@/defaults/profile/bookmarks.html
-@BINPATH@/defaults/profile/localstore.rdf
-@BINPATH@/defaults/profile/mimeTypes.rdf
-@BINPATH@/defaults/profile/chrome/*
-#ifdef MOZ_UPDATER
-@BINPATH@/update.locale
-@BINPATH@/updater.ini
-#endif
-@BINPATH@/dictionaries/*
-@BINPATH@/hyphenation/*
-#ifdef XP_WIN32
-@BINPATH@/uninstall/helper.exe
 #endif
 
 [xpcom]
@@ -586,33 +567,3 @@ bin/components/@DLL_PREFIX@nkgnomevfs@DLL_SUFFIX@
 @BINPATH@/chrome/icons/
 @BINPATH@/chrome/chrome@JAREXT@
 @BINPATH@/chrome/chrome.manifest
-@BINPATH@/components/AboutRedirector.js
-@BINPATH@/components/AddonUpdateService.js
-@BINPATH@/components/AlertsService.js
-@BINPATH@/components/AutoCompleteCache.js
-@BINPATH@/components/BlocklistPrompt.js
-@BINPATH@/components/BrowserCLH.js
-@BINPATH@/components/BrowserStartup.js
-@BINPATH@/components/ContentDispatchChooser.js
-@BINPATH@/components/ContentPermissionPrompt.js
-@BINPATH@/components/DirectoryProvider.js
-@BINPATH@/components/DownloadManagerUI.js
-@BINPATH@/components/FormAutoComplete.js
-@BINPATH@/components/HelperAppDialog.js
-@BINPATH@/components/LoginManager.js
-@BINPATH@/components/LoginManagerPrompter.js
-@BINPATH@/components/MobileComponents.manifest
-@BINPATH@/components/MobileComponents.xpt
-@BINPATH@/components/PromptService.js
-@BINPATH@/components/SessionStore.js
-@BINPATH@/components/Sidebar.js
-#ifdef MOZ_SAFE_BROWSING
-@BINPATH@/components/SafeBrowsing.js
-#endif
-#ifdef MOZ_UPDATER
-@BINPATH@/components/UpdatePrompt.js
-#endif
-@BINPATH@/components/WebappsSupport.js
-@BINPATH@/components/XPIDialogService.js
-@BINPATH@/components/browsercomps.xpt
-@BINPATH@/extensions/feedback@mobile.mozilla.org.xpi
