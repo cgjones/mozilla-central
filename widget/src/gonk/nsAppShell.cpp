@@ -1,3 +1,5 @@
+/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/* vim: set ts=4 sw=4 sts=4 tw=80 et: */
 /* ***** BEGIN LICENSE BLOCK *****
  * Version: MPL 1.1/GPL 2.0/LGPL 2.1
  *
@@ -48,7 +50,10 @@
 #include <unistd.h>
 
 #include "nsAppShell.h"
+#include "nsGkAtoms.h"
 #include "nsWindow.h"
+#include "nsIObserverService.h"
+#include "mozilla/Services.h"
 
 #include "android/log.h"
 
@@ -78,14 +83,15 @@ static nsAppShell *gAppShell = NULL;
 static int epollfd = 0;
 static int signalfds[2] = {0};
 
+class fdHandler;
+typedef void(*fdHandlerCallback)(int, fdHandler *);
+
 class fdHandler {
 public:
-    typedef void(*fFdHandler)(int, fdHandler *);
-
     fdHandler() : mtState(MT_START), mtDown(false) { }
 
     int fd;
-    fFdHandler func;
+    fdHandlerCallback func;
     enum mtStates {
         MT_START,
         MT_COLLECT,
@@ -134,6 +140,12 @@ pipeHandler(int fd, fdHandler *data)
     } while (len > 0);
 }
 
+static
+PRUint64 timevalToMS(const struct timeval &time)
+{
+    return time.tv_sec * 1000 + time.tv_usec / 1000;
+}
+
 static void
 sendMouseEvent(PRUint32 msg, struct timeval *time, int x, int y)
 {
@@ -142,7 +154,7 @@ sendMouseEvent(PRUint32 msg, struct timeval *time, int x, int y)
 
     event.refPoint.x = x;
     event.refPoint.y = y;
-    event.time = time->tv_sec * 1000 + time->tv_usec / 1000;
+    event.time = timevalToMS(*time);
     event.isShift = false;
     event.isControl = false;
     event.isMeta = false;
@@ -166,8 +178,6 @@ multitouchHandler(int fd, fdHandler *data)
     }
 
     event_count /= sizeof(struct input_event);
-
-    PRUint32 msg;
 
     for (int i = 0; i < event_count; i++) {
         input_event *event = &events[i];
@@ -235,6 +245,109 @@ multitouchHandler(int fd, fdHandler *data)
     }
 }
 
+static void
+sendKeyEvent(PRUint32 keyCode, bool keyDown, const struct timeval &time)
+{
+    PRUint32 msg = keyDown ? NS_KEY_PRESS : NS_KEY_UP;
+    nsKeyEvent event(true, msg, NULL);
+    event.time = timevalToMS(time);
+    nsWindow::DispatchInputEvent(event);
+}
+
+static void
+sendSpecialKeyEvent(nsIAtom *command, const struct timeval &time)
+{
+    nsCommandEvent event(true, nsGkAtoms::onAppCommand, command, NULL);
+    event.time = timevalToMS(time);
+    nsWindow::DispatchInputEvent(event);
+}
+
+static void
+keyHandler(int fd, fdHandler *data)
+{
+    // The Linux kernel's input documentation (Documentation/input/input.txt)
+    // says that we'll always read a multiple of sizeof(input_event) bytes here.
+    input_event events[16];
+    ssize_t bytesRead = read(fd, events, sizeof(events));
+    if (bytesRead < 0) {
+        LOG("Error reading in keyHandler");
+        return;
+    }
+    MOZ_ASSERT(bytesRead % sizeof(input_event) == 0);
+
+    for (unsigned int i = 0; i < bytesRead / sizeof(struct input_event); i++) {
+        const input_event &e = events[i];
+
+        if (e.type == EV_SYN) {
+            // Ignore this event; it just signifies that a key was pressed.
+            continue;
+        }
+
+        if (e.type != EV_KEY) {
+            LOG("Got unknown key event type. type 0x%04x code 0x%04x value %d",
+                e.type, e.code, e.value);
+            continue;
+        }
+
+        if (e.value != 0 && e.value != 1) {
+            LOG("Got unknown key event value. type 0x%04x code 0x%04x value %d",
+                e.type, e.code, e.value);
+            continue;
+        }
+
+        bool pressed = e.value == 1;
+        const char* upOrDown = pressed ? "pressed" : "released";
+        switch (e.code) {
+        case KEY_BACK:
+            LOG("Back key %s", upOrDown);
+            if (!pressed)
+                sendSpecialKeyEvent(nsGkAtoms::Clear, e.time);
+            break;
+        case KEY_MENU:
+            LOG("Menu key %s", upOrDown);
+            if (!pressed)
+                sendSpecialKeyEvent(nsGkAtoms::Menu, e.time);
+            break;
+        case KEY_SEARCH:
+            LOG("Search key %s", upOrDown);
+            if (pressed)
+                sendSpecialKeyEvent(nsGkAtoms::Search, e.time);
+            break;
+        case KEY_HOME:
+            LOG("Home key %s", upOrDown);
+            if (pressed) {
+                nsCOMPtr<nsIObserverService> obsServ =
+                    mozilla::services::GetObserverService();
+                obsServ->NotifyObservers(NULL, "home-button-pressed", NULL);
+            }
+            break;
+        case KEY_POWER:
+            LOG("Power key %s", upOrDown);
+            if (pressed) {
+                nsCOMPtr<nsIObserverService> obsServ =
+                    mozilla::services::GetObserverService();
+                NS_NAMED_LITERAL_STRING(minimize, "heap-minimize");
+                obsServ->NotifyObservers(NULL, "memory-pressure", minimize.get());
+                obsServ->NotifyObservers(NULL, "application-background", NULL);
+            }
+            break;
+        case KEY_VOLUMEUP:
+            LOG("Volume up key %s", upOrDown);
+            if (pressed)
+                sendSpecialKeyEvent(nsGkAtoms::VolumeUp, e.time);
+            break;
+        case KEY_VOLUMEDOWN:
+            LOG("Volume down key %s", upOrDown);
+            if (pressed)
+                sendSpecialKeyEvent(nsGkAtoms::VolumeDown, e.time);
+            break;
+        default:
+            LOG("Got unknown key event code. type 0x%04x code 0x%04x value %d",
+                e.type, e.code, e.value);
+        }
+    }
+}
+
 nsAppShell::nsAppShell()
     : mNativeCallbackRequest(false)
 {
@@ -279,30 +392,37 @@ nsAppShell::Init()
 
     struct dirent *entry;
     while ((entry = readdir(dir))) {
-        char buf[64];
+        char entryName[64];
         int fd = open(entry->d_name, O_RDONLY);
-        if (ioctl(fd, EVIOCGNAME(sizeof(buf)), buf) >= 0)
-            LOG("Found device %s - %s", entry->d_name, buf);
+        if (ioctl(fd, EVIOCGNAME(sizeof(entryName)), entryName) >= 0)
+            LOG("Found device %s - %s", entry->d_name, entryName);
+        else
+            continue;
 
-        char absflags[(ABS_MAX + 1) / 8];
-        if (ioctl(fd, EVIOCGBIT(EV_ABS, sizeof(absflags)), absflags) >= 0) {
-	    if (BITSET(ABS_MT_POSITION_X, absflags)) {
-                LOG("Found absolute input device");
+        fdHandlerCallback handlerFunc = NULL;
 
-                handler = gHandlers.AppendElement();
-                handler->fd = fd;
-                handler->func = multitouchHandler;
-                event.data.u32 = gHandlers.Length() - 1;
-                if (epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &event))
-                    LOG("Failed to add fd to epoll fd");
-            }
+        char flags[(NS_MAX(ABS_MAX, KEY_MAX) + 1) / 8];
+        if (ioctl(fd, EVIOCGBIT(EV_ABS, sizeof(flags)), flags) >= 0 &&
+            BITSET(ABS_MT_POSITION_X, flags)) {
+
+            LOG("Found absolute input device");
+            handlerFunc = multitouchHandler;
         }
-/*
-        char keyflags[(KEY_MAX + 1) / 8];
-        if (ioctl(fd, EVIOCGBIT(EV_KEY, sizeof(keyflags)), keyflags) >= 0) {
+        else if (ioctl(fd, EVIOCGBIT(EV_KEY, sizeof(flags)), flags) >= 0) {
             LOG("Found key input device");
+            handlerFunc = keyHandler;
         }
-*/
+
+        // Register the handler, if we have one.
+        if (!handlerFunc)
+            continue;
+
+        handler = gHandlers.AppendElement();
+        handler->fd = fd;
+        handler->func = handlerFunc;
+        event.data.u32 = gHandlers.Length() - 1;
+        if (epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &event))
+            LOG("Failed to add fd to epoll fd");
     }
 
     struct sigaction sig = {
