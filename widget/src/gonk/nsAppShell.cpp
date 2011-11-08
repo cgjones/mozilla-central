@@ -51,6 +51,7 @@
 
 #include "nsAppShell.h"
 #include "nsGkAtoms.h"
+#include "nsGUIEvent.h"
 #include "nsWindow.h"
 #include "nsIObserverService.h"
 #include "mozilla/Services.h"
@@ -246,12 +247,22 @@ multitouchHandler(int fd, fdHandler *data)
 }
 
 static void
-sendKeyEvent(PRUint32 keyCode, bool keyDown, const struct timeval &time)
+sendKeyEventWithMsg(PRUint32 keyCode, PRUint32 msg, const struct timeval &time)
 {
-    PRUint32 msg = keyDown ? NS_KEY_PRESS : NS_KEY_UP;
     nsKeyEvent event(true, msg, NULL);
     event.time = timevalToMS(time);
     nsWindow::DispatchInputEvent(event);
+}
+
+static void
+sendKeyEvent(PRUint32 keyCode, bool keyDown, const struct timeval &time)
+{
+    sendKeyEventWithMsg(keyCode, keyDown ? NS_KEY_DOWN : NS_KEY_UP, time);
+    sendKeyEventWithMsg(keyCode, NS_KEY_PRESS, time);
+    /*if (keyDown) {
+        // Send a key press event right after the key down event.
+        sendKeyEventWithMsg(keyCode, NS_KEY_PRESS, time);
+    }*/
 }
 
 static void
@@ -315,6 +326,7 @@ keyHandler(int fd, fdHandler *data)
             break;
         case KEY_HOME:
             LOG("Home key %s", upOrDown);
+            sendKeyEvent(NS_VK_HOME, pressed, e.time);
             if (pressed) {
                 nsCOMPtr<nsIObserverService> obsServ =
                     mozilla::services::GetObserverService();
@@ -323,13 +335,7 @@ keyHandler(int fd, fdHandler *data)
             break;
         case KEY_POWER:
             LOG("Power key %s", upOrDown);
-            if (pressed) {
-                nsCOMPtr<nsIObserverService> obsServ =
-                    mozilla::services::GetObserverService();
-                NS_NAMED_LITERAL_STRING(minimize, "heap-minimize");
-                obsServ->NotifyObservers(NULL, "memory-pressure", minimize.get());
-                obsServ->NotifyObservers(NULL, "application-background", NULL);
-            }
+            sendKeyEvent(NS_VK_SLEEP, pressed, e.time);
             break;
         case KEY_VOLUMEUP:
             LOG("Volume up key %s", upOrDown);

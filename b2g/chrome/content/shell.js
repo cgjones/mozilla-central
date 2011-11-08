@@ -106,10 +106,17 @@ var shell = {
         win.document.dispatchEvent(evt);
         break;
     }    
+  },
+
+  _keyPressListener: function shell_keyPressListener(e) {
+    //if (e.keyCode == e.DOM_VK_HOME) {
+      doCommand("cmd_close");
+    //}
   }
 };
 
-Cc["@mozilla.org/observer-service;1"]
+window.addEventListener("keypress", shell._keyPressListener, true);
+/*Cc["@mozilla.org/observer-service;1"]
   .getService(Ci.nsIObserverService)
   .addObserver(function() { shell.doCommand('cmd_close'); },
-               'home-button-pressed', false);
+               'home-button-pressed', false);*/
