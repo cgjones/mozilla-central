@@ -13,13 +13,21 @@
       }).bind(this));
     },
     handleEvent: function teh_handleEvent(evt) {
+      var eventTarget = this.target;
+
       var type = '';
       switch (evt.type) {
         case 'mousedown':
           this.target = evt.target;
+          this.timestamp = evt.timeStamp;
           type = 'touchstart';
           break;
         case 'mousemove':
+          // On device a mousemove event if fired right after the mousedown
+          // because of the size of the finger, so let's ignore what happens
+          // below 5ms
+          if (evt.timeStamp - this.timestamp < 5)
+            return;
           type = 'touchmove';
           break;
         case 'mouseup':
@@ -37,8 +45,12 @@
           return;
       }
 
-      if (this.target)
-        this.sendTouchEvent(evt, this.target, type);
+      var target = eventTarget || this.target;
+      if (target) {
+        this.sendTouchEvent(evt, target, type);
+        evt.preventDefault();
+        evt.stopPropagation();
+      }
     },
     sendTouchEvent: function teh_sendTouchEvent(evt, target, name) {
       var touchEvent = document.createEvent("touchevent");
