@@ -3,8 +3,7 @@
   let contextMenuTimeout = 0;
 
   let TouchEventHandler = {
-    events: ['mousedown', 'mousemove', 'mouseup', 'mouseout',
-             'unload', 'contextmenu'],
+    events: ['mousedown', 'mousemove', 'mouseup', 'unload'],
     start: function teh_start() {
       this.events.forEach((function(evt) {
         shell.home.addEventListener(evt, this, true);
@@ -24,55 +23,75 @@
           this.target = evt.target;
           this.timestamp = evt.timeStamp;
           evt.target.setCapture(false);
+          contextMenuTimeout =
+            this.sendContextMenu(evt.target, evt.pageX, evt.pageY, 2000);
+          this.startX = evt.pageX;
+          this.startY = evt.pageY;
           type = 'touchstart';
           break;
         case 'mousemove':
+          if (!eventTarget)
+            return;
+
           // On device a mousemove event if fired right after the mousedown
           // because of the size of the finger, so let's ignore what happens
           // below 5ms
-          if (evt.timeStamp - this.timestamp < 5) {
-            let x = evt.pageX;
-            let y = evt.pageY;
-            let event = evt.target.ownerDocument.createEvent("MouseEvent");
-            event.initMouseEvent("contextmenu", true, true, content,
-                                 0, x, y, x, y, false, false, false, false,
-                                 0, null);
-            event.x = x;
-            event.y = y;
-            contextMenuTimeout = window.setTimeout(function contextMenu() {
-              evt.target.dispatchEvent(event);
-            }, 2000);
-            return;
-          }
-          window.clearTimeout(contextMenuTimeout);
+          if (evt.timeStamp - this.timestamp < 30)
+            break;
+
+          if (Math.abs(this.startX - evt.pageX) > 15 ||
+              Math.abs(this.startY - evt.pageY) > 15)
+            window.clearTimeout(contextMenuTimeout);
           type = 'touchmove';
           break;
         case 'mouseup':
+          if (!eventTarget)
+            return;
+
+          window.clearTimeout(contextMenuTimeout);
+          eventTarget.ownerDocument.releaseCapture();
           this.target = null;
-          document.releaseCapture();
           type = 'touchend';
           break;
-        case 'mouseout':
-          if (evt.relatedTarget)
-            return;
-          this.target = null;
-          document.releaseCapture();
-          type = 'touchcancel';
-          break;
         case 'unload':
-          TouchEventHandler.stop();
-          return;
-        case 'contextmenu':
+          window.clearTimeout(contextMenuTimeout);
+          eventTarget.ownerDocument.releaseCapture();
           this.target = null;
-          document.releaseCapture();
+          TouchEventHandler.stop();
           return;
       }
 
       let target = eventTarget || this.target;
-      if (target) {
+      if (target && type) {
         this.sendTouchEvent(evt, target, type);
         evt.stopPropagation();
+      } else {
+        evt.preventDefault();
+        evt.stopPropagation();
       }
+    },
+    sendContextMenu: function teh_sendContextMenu(target, x, y, delay) {
+      let doc = target.ownerDocument;
+      let evt = doc.createEvent("MouseEvent");
+      evt.initMouseEvent("contextmenu", true, true, doc.defaultView,
+                         0, x, y, x, y, false, false, false, false,
+                         0, null);
+
+      let timeout = window.setTimeout((function contextMenu() {
+        target.dispatchEvent(evt);
+        if (!evt.getPreventDefault())
+          return;
+
+        doc.releaseCapture();
+        this.target = null;
+
+        shell.home.addEventListener('click', function handleClick(evt) {
+          shell.home.removeEventListener('click', handleClick, true);
+          evt.preventDefault();
+          evt.stopPropagation();
+        }, true);
+      }).bind(this), delay);
+      return timeout;
     },
     sendTouchEvent: function teh_sendTouchEvent(evt, target, name) {
       let touchEvent = document.createEvent("touchevent");
