@@ -14,12 +14,12 @@
 # The Original Code is Mozilla.
 #
 # The Initial Developer of the Original Code is
-# the Mozilla Foundation <http://www.mozilla.org/>.
-# Portions created by the Initial Developer are Copyright (C) 2007
+# Mozilla Foundation.
+# Portions created by the Initial Developer are Copyright (C) 2009
 # the Initial Developer. All Rights Reserved.
 #
 # Contributor(s):
-#   Mark Finkle <mfinkle@mozilla.com>
+#   Axel Hecht <l10n@mozilla.com>
 #
 # Alternatively, the contents of this file may be used under the terms of
 # either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -35,54 +35,35 @@
 #
 # ***** END LICENSE BLOCK *****
 
-ifndef LIBXUL_SDK
-include $(topsrcdir)/toolkit/toolkit-tiers.mk
-else
-ifdef ENABLE_TESTS
-tier_testharness_dirs += \
-  testing/mochitest \
-  $(NULL)
-endif
-endif
 
-TIERS += app
+def test(mod, path, entity = None):
+  import re
+  # ignore anything but b2g, which is our local repo checkout name
+  if mod not in ("netwerk", "dom", "toolkit", "security/manager",
+                 "services/sync", "embedding/android",
+                 "mobile"):
+    return False
 
-ifdef MOZ_EXTENSIONS
-tier_app_dirs += extensions
-endif
+  # Ignore Lorentz strings, at least temporarily
+  if mod == "toolkit" and path == "chrome/mozapps/plugins/plugins.dtd":
+    if entity.startswith('reloadPlugin.'): return False
+    if entity.startswith('report.'): return False
 
-ifdef MOZ_SERVICES_SYNC
-tier_app_dirs += services
-endif
+  if mod != "mobile":
+    # we only have exceptions for mobile
+    return True
+  if not entity:
+    return not (re.match(r"searchplugins\/.+\.xml", path) or
+                re.match(r"b2g-l10n.js", path) or
+                re.match(r"defines.inc", path))
+  if path == "defines.inc":
+    return entity != "MOZ_LANGPACK_CONTRIBUTORS"
 
-tier_app_dirs += \
-  $(MOZ_BRANDING_DIRECTORY) \
-  b2g \
-  $(NULL)
-
-
-installer: 
-	@$(MAKE) -C b2g/installer installer
-
-package:
-	@$(MAKE) -C b2g/installer
-
-install::
-	@echo "B2G can't be installed directly."
-	@exit 1
-
-upload::
-	@$(MAKE) -C b2g/installer upload
-
-ifdef ENABLE_TESTS
-# Implemented in testing/testsuite-targets.mk
-
-mochitest-browser-chrome:
-	$(RUN_MOCHITEST) --browser-chrome
-	$(CHECK_TEST_ERROR)
-
-mochitest:: mochitest-browser-chrome
-
-.PHONY: mochitest-browser-chrome
-endif
-
+  if path != "chrome/region.properties":
+    # only region.properties exceptions remain, compare all others
+    return True
+  
+  return not (re.match(r"browser\.search\.order\.[1-9]", entity) or
+              re.match(r"browser\.contentHandlers\.types\.[0-5]", entity) or
+              re.match(r"gecko\.handlerService\.schemes\.", entity) or
+              re.match(r"gecko\.handlerService\.defaultHandlersVersion", entity))

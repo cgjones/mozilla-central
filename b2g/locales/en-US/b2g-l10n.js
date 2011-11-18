@@ -11,15 +11,14 @@
 # for the specific language governing rights and limitations under the
 # License.
 #
-# The Original Code is Mozilla.
+# The Original Code is the Firefox browser.
 #
 # The Initial Developer of the Original Code is
-# the Mozilla Foundation <http://www.mozilla.org/>.
-# Portions created by the Initial Developer are Copyright (C) 2007
+# Benjamin Smedberg <bsmedberg@covad.net>
+# Portions created by the Initial Developer are Copyright (C) 2004
 # the Initial Developer. All Rights Reserved.
 #
 # Contributor(s):
-#   Mark Finkle <mfinkle@mozilla.com>
 #
 # Alternatively, the contents of this file may be used under the terms of
 # either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -35,54 +34,6 @@
 #
 # ***** END LICENSE BLOCK *****
 
-ifndef LIBXUL_SDK
-include $(topsrcdir)/toolkit/toolkit-tiers.mk
-else
-ifdef ENABLE_TESTS
-tier_testharness_dirs += \
-  testing/mochitest \
-  $(NULL)
-endif
-endif
+#filter substitution
 
-TIERS += app
-
-ifdef MOZ_EXTENSIONS
-tier_app_dirs += extensions
-endif
-
-ifdef MOZ_SERVICES_SYNC
-tier_app_dirs += services
-endif
-
-tier_app_dirs += \
-  $(MOZ_BRANDING_DIRECTORY) \
-  b2g \
-  $(NULL)
-
-
-installer: 
-	@$(MAKE) -C b2g/installer installer
-
-package:
-	@$(MAKE) -C b2g/installer
-
-install::
-	@echo "B2G can't be installed directly."
-	@exit 1
-
-upload::
-	@$(MAKE) -C b2g/installer upload
-
-ifdef ENABLE_TESTS
-# Implemented in testing/testsuite-targets.mk
-
-mochitest-browser-chrome:
-	$(RUN_MOCHITEST) --browser-chrome
-	$(CHECK_TEST_ERROR)
-
-mochitest:: mochitest-browser-chrome
-
-.PHONY: mochitest-browser-chrome
-endif
-
+pref("general.useragent.locale", "@AB_CD@");

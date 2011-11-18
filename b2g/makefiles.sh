@@ -15,11 +15,10 @@
 #
 # The Initial Developer of the Original Code is
 # the Mozilla Foundation <http://www.mozilla.org/>.
-# Portions created by the Initial Developer are Copyright (C) 2007
+# Portions created by the Initial Developer are Copyright (C) 2011
 # the Initial Developer. All Rights Reserved.
 #
 # Contributor(s):
-#   Mark Finkle <mfinkle@mozilla.com>
 #
 # Alternatively, the contents of this file may be used under the terms of
 # either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -41,11 +40,10 @@ dom/locales/Makefile
 toolkit/locales/Makefile
 security/manager/locales/Makefile
 b2g/app/Makefile
-b2g/app/profile/extensions/Makefile
 $MOZ_BRANDING_DIRECTORY/Makefile
-$MOZ_BRANDING_DIRECTORY/locales/Makefile
 b2g/chrome/Makefile
 b2g/installer/Makefile
+b2g/locales/Makefile
 b2g/Makefile"
 
 if test -n "$MOZ_UPDATE_PACKAGING"; then

@@ -18,6 +18,25 @@
 @APPNAME@/Contents/Resources/
 #endif
 
+[@AB_CD@]
+@BINPATH@/chrome/@AB_CD@@JAREXT@
+@BINPATH@/chrome/@AB_CD@.manifest
+@BINPATH@/@PREF_DIR@/b2g-l10n.js
+@BINPATH@/searchplugins/*
+@BINPATH@/defaults/profile/bookmarks.html
+@BINPATH@/defaults/profile/localstore.rdf
+@BINPATH@/defaults/profile/mimeTypes.rdf
+@BINPATH@/defaults/profile/chrome/*
+#ifdef MOZ_UPDATER
+@BINPATH@/update.locale
+@BINPATH@/updater.ini
+#endif
+@BINPATH@/dictionaries/*
+@BINPATH@/hyphenation/*
+#ifdef XP_WIN32
+@BINPATH@/uninstall/helper.exe
+#endif
+
 [xpcom]
 @BINPATH@/dependentlibs.list
 #ifndef MOZ_STATIC_JS
@@ -437,8 +456,7 @@
 
 ; [Default Preferences]
 ; All the pref files must be part of base to prevent migration bugs
-@BINPATH@/@PREF_DIR@/mobile.js
-@BINPATH@/@PREF_DIR@/mobile-branding.js
+@BINPATH@/@PREF_DIR@/b2g.js
 @BINPATH@/@PREF_DIR@/channel-prefs.js
 #ifdef MOZ_SERVICES_SYNC
 @BINPATH@/@PREF_DIR@/services-sync.js
@@ -564,7 +582,7 @@ bin/components/@DLL_PREFIX@nkgnomevfs@DLL_SUFFIX@
 @BINPATH@/MozSounds.cmd
 #endif
 
-[mobile]
+[b2g]
 @BINPATH@/chrome/icons/
 @BINPATH@/chrome/chrome@JAREXT@
 @BINPATH@/chrome/chrome.manifest

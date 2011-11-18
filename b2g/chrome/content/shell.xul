@@ -55,9 +55,6 @@
     <command id="cmd_close" oncommand="CommandUpdater.doCommand(this.id);"/>
   </commandset>
 
-  <keyset id="mainKeyset">
-    <key id="key_close" keycode="VK_ESCAPE" command="cmd_close"/>
-  </keyset>
-
   <browser id="homescreen" type="content-primary" flex="1" style="overflow: hidden;"/>
 </window>
+

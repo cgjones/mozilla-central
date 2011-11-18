@@ -42,7 +42,7 @@ VPATH     = @srcdir@
 
 include $(DEPTH)/config/autoconf.mk
 
-PREF_JS_EXPORTS = $(srcdir)/mobile.js
+PREF_JS_EXPORTS = $(srcdir)/b2g.js
 DIST_FILES = application.ini
 
 ifndef LIBXUL_SDK
@@ -87,7 +87,7 @@ APP_BUILDID = $(shell $(PYTHON) $(topsrcdir)/toolkit/xre/make-platformini.py --p
 else
 APP_BUILDID = $(MOZ_BUILD_DATE)
 endif
-APP_ICON = mobile
+APP_ICON = b2g
 
 DEFINES += -DGRE_MILESTONE=$(GRE_MILESTONE) \
            -DGRE_BUILDID=$(GRE_BUILDID) \

@@ -51,8 +51,10 @@ MOZ_PKG_MANIFEST_P = $(srcdir)/package-manifest.in
 MOZ_NONLOCALIZED_PKG_LIST = \
 	xpcom \
 	browser \
-	mobile \
+	b2g \
 	$(NULL)
+
+MOZ_LOCALIZED_PKG_LIST = $(AB_CD)
 
 DEFINES += \
 	-DAB_CD=$(AB_CD) \

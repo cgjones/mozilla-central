@@ -45,9 +45,14 @@ MOZ_OFFICIAL_BRANDING_DIRECTORY=b2g/branding/official
 # MOZ_APP_DISPLAYNAME is set by branding/configure.sh
 
 MOZ_SAFE_BROWSING=
-MOZ_SERVICES_SYNC=1
+MOZ_SERVICES_SYNC=
 
 MOZ_DISABLE_DOMCRYPTO=1
+
+if test "$OS_TARGET" = "Android"; then
+MOZ_CAPTURE=1
+MOZ_RAW=1
+fi
 
 # use custom widget for html:select
 MOZ_USE_NATIVE_POPUP_WINDOWS=1
