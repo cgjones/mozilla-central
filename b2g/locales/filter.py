@@ -41,7 +41,7 @@ def test(mod, path, entity = None):
   # ignore anything but b2g, which is our local repo checkout name
   if mod not in ("netwerk", "dom", "toolkit", "security/manager",
                  "services/sync", "embedding/android",
-                 "mobile"):
+                 "b2g"):
     return False
 
   # Ignore Lorentz strings, at least temporarily
@@ -49,12 +49,11 @@ def test(mod, path, entity = None):
     if entity.startswith('reloadPlugin.'): return False
     if entity.startswith('report.'): return False
 
-  if mod != "mobile":
-    # we only have exceptions for mobile
+  if mod != "b2g":
+    # we only have exceptions for b2g
     return True
   if not entity:
-    return not (re.match(r"searchplugins\/.+\.xml", path) or
-                re.match(r"b2g-l10n.js", path) or
+    return not (re.match(r"b2g-l10n.js", path) or
                 re.match(r"defines.inc", path))
   if path == "defines.inc":
     return entity != "MOZ_LANGPACK_CONTRIBUTORS"

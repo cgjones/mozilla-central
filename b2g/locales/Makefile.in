@@ -45,22 +45,12 @@ include $(DEPTH)/config/autoconf.mk
 
 include $(topsrcdir)/config/config.mk
 
-vpath %.xml @srcdir@/en-US/searchplugins
-vpath %.xml $(LOCALE_SRCDIR)/searchplugins
-
 ifdef LOCALE_MERGEDIR
 vpath crashreporter%.ini $(LOCALE_MERGEDIR)/b2g/crashreporter
 endif
 vpath crashreporter%.ini $(LOCALE_SRCDIR)/crashreporter
 ifdef LOCALE_MERGEDIR
 vpath crashreporter%.ini @srcdir@/en-US/crashreporter
-endif
-ifdef LOCALE_MERGEDIR
-vpath book%.inc $(LOCALE_MERGEDIR)/b2g/profile
-endif
-vpath book%.inc $(LOCALE_SRCDIR)/profile
-ifdef LOCALE_MERGEDIR
-vpath book%.inc @srcdir@/en-US/profile
 endif
 
 
@@ -124,15 +114,6 @@ install::
 
 NO_JA_JP_MAC_AB_CD := $(if $(filter ja-JP-mac, $(AB_CD)),ja,$(AB_CD))
 
-SEARCH_PLUGINS = $(shell cat $(call MERGE_FILE,/searchplugins/list.txt))
-
-libs:: $(addsuffix .xml,$(SEARCH_PLUGINS))
-	$(SYSINSTALL) $(IFLAGS1) $^ $(FINAL_TARGET)/searchplugins
-
-install:: $(addsuffix .xml,$(SEARCH_PLUGINS))
-	$(SYSINSTALL) $(IFLAGS1) $^ $(DESTDIR)$(mozappdir)/searchplugins
-
-
 libs-%:
 	$(NSINSTALL) -D $(DIST)/install
 	@$(MAKE) -C ../../toolkit/locales libs-$* BOTH_MANIFESTS=1
@@ -168,7 +149,6 @@ clobber-zip:
 	$(RM) $(STAGEDIST)/chrome/$(AB_CD).jar \
 	  $(STAGEDIST)/chrome/$(AB_CD).manifest \
 	  $(STAGEDIST)/defaults/pref/b2g-l10n.js
-	$(RM) -rf  $(STAGEDIST)/searchplugins \
 	  $(STAGEDIST)/dictionaries \
 	  $(STAGEDIST)/hyphenation \
 	  $(STAGEDIST)/defaults/profile \
@@ -204,13 +184,32 @@ libs:: crashreporter-override.ini
 	$(SYSINSTALL) $(IFLAGS1) $^ $(FINAL_TARGET)
 endif
 
+# When we unpack b2g on MacOS X the platform.ini and application.ini are in slightly
+# different locations that on all other platforms
+ifeq (Darwin, $(OS_ARCH))
+ifdef LIBXUL_SDK
+GECKO_PLATFORM_INI_PATH="$(STAGEDIST)/../Frameworks/XUL.framework/Versions/$(MOZILLA_VERSION)/platform.ini"
+else
+GECKO_PLATFORM_INI_PATH="$(STAGEDIST)/platform.ini"
+endif
+B2G_APPLICATION_INI_PATH="$(STAGEDIST)/application.ini"
+else
+ifdef LIBXUL_SDK
+GECKO_PLATFORM_INI_PATH="$(STAGEDIST)/xulrunner/platform.ini"
+else
+GECKO_PLATFORM_INI_PATH="$(STAGEDIST)/platform.ini"
+endif
+B2G_APPLICATION_INI_PATH="$(STAGEDIST)/application.ini"
+endif
+
+
 ident:
 	@printf "gecko_revision "
 	@$(PYTHON) $(topsrcdir)/config/printconfigsetting.py $(GECKO_PLATFORM_INI_PATH) Build SourceStamp
-	@printf "fennec_revision "
-	@$(PYTHON) $(topsrcdir)/config/printconfigsetting.py $(FENNEC_APPLICATION_INI_PATH) App SourceStamp
+	@printf "b2g_revision "
+	@$(PYTHON) $(topsrcdir)/config/printconfigsetting.py $(B2G_APPLICATION_INI_PATH) App SourceStamp
 	@printf "buildid "
-	@$(PYTHON) $(topsrcdir)/config/printconfigsetting.py $(FENNEC_APPLICATION_INI_PATH) App BuildID
+	@$(PYTHON) $(topsrcdir)/config/printconfigsetting.py $(B2G_APPLICATION_INI_PATH) App BuildID
 
 merge-%:
 ifdef LOCALE_MERGEDIR

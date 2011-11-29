@@ -74,7 +74,7 @@ var shell = {
 
   start: function shell_init() {
     window.controllers.appendController(this);
-    window.addEventListener('keypress', this, true);
+    window.addEventListener('keypress', this);
 
     let ioService = Cc['@mozilla.org/network/io-service;1']
                       .getService(Ci.nsIIOService2);
@@ -87,7 +87,7 @@ var shell = {
 
   stop: function shell_stop() {
     window.controllers.removeController(this);
-    window.removeEventListener('keypress', this, true);
+    window.removeEventListener('keypress', this);
   },
 
   supportsCommand: function shell_supportsCommand(cmd) {
@@ -123,6 +123,9 @@ var shell = {
       case evt.DOM_VK_HOME:
         break;
       case evt.DOM_VK_ESCAPE:
+        if (evt.getPreventDefault())
+          return;
+
         this.doCommand('cmd_close');
         break;
     }

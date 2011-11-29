@@ -115,7 +115,7 @@ ifdef LIBXUL_SDK
 ifndef SYSTEM_LIBXUL
 	@echo "Packaging xulrunner..."
 	@rm -rf $(LIBXUL_DIST)/xulrunner*
-	@$(MAKE) -C $(LIBXUL_DIST)/.. package || echo "Perhaps you're trying to package a prebuilt SDK. See 'https://wiki.mozilla.org/Mobile/Build/Fennec#Build' for more information."
+	@$(MAKE) -C $(LIBXUL_DIST)/.. package || echo "Perhaps you're trying to package a prebuilt SDK. See 'https://wiki.mozilla.org/B2G' for more information."
 	@cd $(DIST)/$(MOZ_PKG_DIR); $(UNMAKE_PACKAGE)
 	@echo "Removing unpackaged files... (the ones xulrunner/installer keeps)"
 	@cd $(DIST)/$(MOZ_PKG_DIR)/xulrunner; rm -rf $(NO_PKG_FILES)
