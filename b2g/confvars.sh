@@ -35,8 +35,8 @@
 #
 # ***** END LICENSE BLOCK *****
 
-MOZ_APP_NAME=b2g
-MOZ_APP_UA_NAME=B2G
+MOZ_APP_BASENAME=b2g
+MOZ_APP_VENDOR=Mozilla
 
 MOZ_APP_VERSION=11.0a1
 
@@ -56,6 +56,9 @@ fi
 
 # use custom widget for html:select
 MOZ_USE_NATIVE_POPUP_WINDOWS=1
+
+MOZ_APP_ID={3c2e2abc-06d4-11e1-ac3b-374f68613e61}
+MOZ_EXTENSION_MANAGER=1
 
 if test "$LIBXUL_SDK"; then
 MOZ_XULRUNNER=1
