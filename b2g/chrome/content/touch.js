@@ -3,11 +3,14 @@
   let debugging = false;
   function debug(str) {
     if (debugging)
-      dump(str);
+      dump(str + '\n');
   };
-  let gIgnoreEvents = false;
 
   let contextMenuTimeout = 0;
+
+  // This guard is used to not re-enter the events processing loop for
+  // self dispatched events
+  let ignoreEvents = false;
 
   // During a 'touchstart' and the first 'touchmove' mouse events can be
   // prevented for the current touch sequence.
@@ -37,9 +40,7 @@
       }).bind(this));
     },
     handleEvent: function teh_handleEvent(evt) {
-      // Handle left button only and prevents re-entering the event loop
-      // for self disptached events.
-      if (evt.button || gIgnoreEvents)
+      if (evt.button || ignoreEvents)
         return;
 
       let eventTarget = this.target;
@@ -107,25 +108,29 @@
 
         case 'click':
           if (!isNewTouchAction) {
-            debug('click: cancel\n');
+            debug('click: cancel');
+
             evt.preventDefault();
             evt.stopPropagation();
           } else {
             // Mouse events has been cancelled so dispatch a sequence
             // of events to where touchend has been fired
             if (preventMouseEvents) {
-            let target = evt.target;
-            try{
-              gIgnoreEvents = true;
-              this.fireMouseEvent('mousemove', target, evt.pageX, evt.pageY);
-              this.fireMouseEvent('mousedown', target, evt.pageX, evt.pageY);
-              this.fireMouseEvent('mouseup', target, evt.pageX, evt.pageY);
-              gIgnoreEvents = false;
-            } catch(e) {
-              alert(e);
+              let target = evt.target;
+              ignoreEvents = true;
+              try {
+                this.fireMouseEvent('mousemove', evt);
+                this.fireMouseEvent('mousedown', evt);
+                this.fireMouseEvent('mouseup', evt);
+              } catch (e) {
+                alert(e);
+              }
+              evt.preventDefault();
+              evt.stopPropagation();
+              ignoreEvents = false;
             }
-            }
-            debug('click: fire\n');
+
+            debug('click: fire');
           }
           return;
       }
@@ -142,17 +147,16 @@
         evt.stopPropagation();
 
         if (type != 'touchmove')
-          debug('cancelled (fire ' + type + ')\n');
+          debug('cancelled (fire ' + type + ')');
       }
     },
-    fireMouseEvent: function teh_fireMouseEvent(type, target, x, y) {
-      debug(type + ': fire\n');
-      let doc = target.ownerDocument;
-      let evt = doc.createEvent('MouseEvent');
-      evt.initMouseEvent(type, true, true, doc.defaultView,
-                         0, x, y, x, y, false, false, false, false,
-                         0, null);
-      target.dispatchEvent(evt);
+    fireMouseEvent: function teh_fireMouseEvent(type, evt)  {
+      debug(type + ': fire');
+
+      let content = evt.target.ownerDocument.defaultView;
+      var utils = content.QueryInterface(Ci.nsIInterfaceRequestor)
+                         .getInterface(Ci.nsIDOMWindowUtils);
+      utils.sendMouseEvent(type, evt.pageX, evt.pageY, 0, 1, 0, true);
     },
     sendContextMenu: function teh_sendContextMenu(target, x, y, delay) {
       let doc = target.ownerDocument;
@@ -193,12 +197,9 @@
     }
   };
 
-  window.addEventListener('load', function touchStart(evt) {
-    window.removeEventListener('load', touchStart, true);
-    shell.home.addEventListener('load', function contentStart(evt) {
-      shell.home.removeEventListener('load', contentStart);
-      TouchEventHandler.start();
-    }, true);
-  }, true);
+  window.addEventListener('ContentStart', function touchStart(evt) {
+    window.removeEventListener('ContentStart', touchStart);
+    TouchEventHandler.start();
+  });
 })();
 

@@ -289,6 +289,7 @@ nsWindow::GetNativeData(PRUint32 aDataType)
 NS_IMETHODIMP
 nsWindow::DispatchEvent(nsGUIEvent *aEvent, nsEventStatus &aStatus)
 {
+    aStatus = (*mEventCallback)(aEvent);
     return NS_OK;
 }
 

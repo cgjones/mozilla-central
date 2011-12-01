@@ -75,6 +75,7 @@ var shell = {
   start: function shell_init() {
     window.controllers.appendController(this);
     window.addEventListener('keypress', this);
+    this.home.addEventListener('load', this, true);
 
     let ioService = Cc['@mozilla.org/network/io-service;1']
                       .getService(Ci.nsIIOService2);
@@ -110,25 +111,113 @@ var shell = {
   doCommand: function shell_doCommand(cmd) {
     switch (cmd) {
       case 'cmd_close':
-        let win = this.home.contentWindow;
-        let evt = win.document.createEvent('UIEvents');
-        evt.initUIEvent('appclose', true, true, win, 1);
-        win.document.dispatchEvent(evt);
+        this.sendEvent(this.home.contentWindow, 'appclose');
         break;
     }
   },
 
   handleEvent: function shell_handleEvent(evt) {
-    switch (evt.keyCode) {
-      case evt.DOM_VK_HOME:
-        break;
-      case evt.DOM_VK_ESCAPE:
-        if (evt.getPreventDefault())
-          return;
+    switch (evt.type) {
+      case 'keypress':
+        switch (evt.keyCode) {
+          case evt.DOM_VK_HOME:
+            this.sendEvent(this.home.contentWindow, 'home');
+            break;
+          case evt.DOM_VK_ESCAPE:
+            if (evt.getPreventDefault())
+              return;
 
-        this.doCommand('cmd_close');
+            this.doCommand('cmd_close');
+            break;
+        }
+        break;
+      case 'load':
+        this.home.removeEventListener('load', this, true);
+        this.sendEvent(window, 'ContentStart');
         break;
     }
+  },
+
+  sendEvent: function shell_sendEvent(content, type, details) {
+    let event = content.document.createEvent('CustomEvent');
+    event.initCustomEvent(type, true, true, details ? details : {});
+    content.dispatchEvent(event);
+  }
+};
+
+(function VirtualKeyboardManager() {
+  let activeElement = null;
+  let isKeyboardOpened = false;
+
+  let constructor = {
+    handleEvent: function vkm_handleEvent(evt) {
+      let contentWindow = shell.home.contentWindow.wrappedJSObject;
+
+      switch (evt.type) {
+        case 'ContentStart':
+          contentWindow.navigator.mozKeyboard = new MozKeyboard();
+          break;
+        case 'keypress':
+          if (evt.keyCode != evt.DOM_VK_ESCAPE || !isKeyboardOpened)
+            return;
+
+          shell.sendEvent(contentWindow, 'hideime');
+          isKeyboardOpened = false;
+
+          evt.preventDefault();
+          evt.stopPropagation();
+          break;
+        case 'mousedown':
+          if (evt.target != activeElement || isKeyboardOpened)
+            return;
+
+          let type = activeElement.type;
+          shell.sendEvent(contentWindow, 'showime', { type: type });
+          isKeyboardOpened = true;
+          break;
+      }
+    },
+    observe: function vkm_observe(subject, topic, data) {
+      let contentWindow = shell.home.contentWindow;
+
+      let shouldOpen = parseInt(data);
+      if (shouldOpen && !isKeyboardOpened) {
+        activeElement = Cc['@mozilla.org/focus-manager;1']
+                          .getService(Ci.nsIFocusManager)
+                          .focusedElement;
+        if (!activeElement)
+          return;
+
+        let type = activeElement.type;
+        shell.sendEvent(contentWindow, 'showime', { type: type });
+      } else if (!shouldOpen && isKeyboardOpened) {
+        shell.sendEvent(contentWindow, 'hideime');
+      }
+      isKeyboardOpened = shouldOpen;
+    }
+  };
+
+  Services.obs.addObserver(constructor, 'ime-enabled-state-changed', false);
+  ['ContentStart', 'keypress', 'mousedown'].forEach(function vkm_events(type) {
+    window.addEventListener(type, constructor, true);
+  });
+})();
+
+
+function MozKeyboard() {
+}
+
+MozKeyboard.prototype = {
+  get utils() {
+    delete this.utils;
+    return this.utils = window.QueryInterface(Ci.nsIInterfaceRequestor)
+                              .getInterface(Ci.nsIDOMWindowUtils);
+  },
+  sendKey: function mozKeyboardSendKey(keyCode) {
+    var utils = this.utils;
+    ['keydown', 'keypress', 'keyup'].forEach(function sendKeyEvents(type) {
+      utils.sendKeyEvent(type, keyCode, keyCode, null);
+    });
   }
 };
 
