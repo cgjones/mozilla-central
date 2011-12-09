@@ -152,6 +152,10 @@ let UI = {
   // Used to keep track of the last opened tab.
   _lastOpenedTab: null,
 
+  // Variable: _originalSmoothScroll
+  // Used to keep track of the tab strip smooth scroll value.
+  _originalSmoothScroll: null,
+
   // ----------
   // Function: toString
   // Prints [UI] for debug use
@@ -471,7 +475,7 @@ let UI = {
     } else {
       GroupItems.setActiveGroupItem(item);
       if (!options || !options.dontSetActiveTabInGroup) {
-        let activeTab = item.getActiveTab()
+        let activeTab = item.getActiveTab();
         if (activeTab)
           this._setActiveTab(activeTab);
       }
@@ -513,6 +517,11 @@ let UI = {
       return;
 
     this._isChangingVisibility = true;
+
+    // store tab strip smooth scroll value and disable it.
+    let tabStrip = gBrowser.tabContainer.mTabstrip;
+    this._originalSmoothScroll = tabStrip.smoothScroll;
+    tabStrip.smoothScroll = false;
 
     // initialize the direction of the page
     this._initPageDirection();
@@ -565,7 +574,8 @@ let UI = {
         TabItems.resumePainting();
       });
     } else {
-      self.clearActiveTab();
+      if (!currentTab || !currentTab._tabViewTabItem)
+        self.clearActiveTab();
       self._isChangingVisibility = false;
       dispatchEvent(event);
 
@@ -609,6 +619,7 @@ let UI = {
     gBrowser.selectedBrowser.focus();
 
     gBrowser.updateTitlebar();
+    gBrowser.tabContainer.mTabstrip.smoothScroll = this._originalSmoothScroll;
 #ifdef XP_MACOSX
     this.setTitlebarColors(false);
 #endif

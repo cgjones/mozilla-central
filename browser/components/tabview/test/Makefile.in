@@ -164,10 +164,12 @@ _BROWSER_FILES = \
                  browser_tabview_bug685476.js \
                  browser_tabview_bug685692.js \
                  browser_tabview_bug686654.js \
+                 browser_tabview_bug696602.js \
                  browser_tabview_bug697390.js \
                  browser_tabview_bug705621.js \
                  browser_tabview_bug706430.js \
                  browser_tabview_bug706736.js \
+                 browser_tabview_bug707466.js \
                  browser_tabview_click_group.js \
                  browser_tabview_dragdrop.js \
                  browser_tabview_exit_button.js \

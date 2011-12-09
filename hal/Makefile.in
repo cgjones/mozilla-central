@@ -45,6 +45,7 @@ VPATH       = \
   $(srcdir)/fallback \
   $(srcdir)/sandbox \
   $(srcdir)/linux \
+  $(srcdir)/windows \
   $(NULL)
 
 include $(DEPTH)/config/autoconf.mk
@@ -76,6 +77,8 @@ CPPSRCS += LinuxHal.cpp
 ifdef MOZ_ENABLE_DBUS
 CPPSRCS += UPowerClient.cpp
 endif
+else ifeq (WINNT,$(OS_TARGET))
+CPPSRCS += WindowsHal.cpp WindowsBattery.cpp
 else
 CPPSRCS += FallbackHal.cpp
 endif

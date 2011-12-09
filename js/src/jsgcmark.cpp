@@ -699,16 +699,6 @@ PrintPropertyGetterOrSetter(JSTracer *trc, char *buf, size_t bufsize)
                     trc->debugPrintIndex ? js_setter_str : js_getter_str); 
 }
 
-#ifdef DEBUG
-static void
-PrintPropertyMethod(JSTracer *trc, char *buf, size_t bufsize)
-{
-    JS_ASSERT(trc->debugPrinter == PrintPropertyMethod);
-    Shape *shape = (Shape *)trc->debugPrintArg;
-    PrintPropertyId(buf, bufsize, shape->propid(), " method");
-}
-#endif /* DEBUG */
-
 static inline void
 ScanValue(GCMarker *gcmarker, const Value &v)
 {
@@ -757,29 +747,58 @@ ScanBaseShape(GCMarker *gcmarker, BaseShape *base)
 }
 
 static inline void
+ScanLinearString(GCMarker *gcmarker, JSLinearString *str)
+{
+    JS_COMPARTMENT_ASSERT_STR(gcmarker->runtime, str);
+    JS_ASSERT(str->isMarked());
+
+    /*
+     * Add extra asserts to confirm the static type to detect incorrect string
+     * mutations.
+     */
+    JS_ASSERT(str->JSString::isLinear());
+    while (str->isDependent()) {
+        str = str->asDependent().base();
+        JS_ASSERT(str->JSString::isLinear());
+        JS_COMPARTMENT_ASSERT_STR(gcmarker->runtime, str);
+        if (!str->markIfUnmarked())
+            break;
+    }
+}
+
+static void
 ScanRope(GCMarker *gcmarker, JSRope *rope)
 {
-    JS_COMPARTMENT_ASSERT_STR(gcmarker->runtime, rope);
-    JS_ASSERT(rope->isMarked());
-
-    JSString *leftChild = NULL;
+    JS_ASSERT(rope->JSString::isRope());
     do {
-        JSString *rightChild = rope->rightChild();
+        JS_COMPARTMENT_ASSERT_STR(gcmarker->runtime, rope);
+        JS_ASSERT(rope->isMarked());
+        JSRope *next = NULL;
 
-        if (rightChild->isRope()) {
-            if (rightChild->markIfUnmarked())
-                gcmarker->pushRope(&rightChild->asRope());
-        } else {
-            rightChild->asLinear().mark(gcmarker);
+        JSString *right = rope->rightChild();
+        if (right->markIfUnmarked()) {
+            if (right->isLinear())
+                ScanLinearString(gcmarker, &right->asLinear());
+            else
+                next = &right->asRope();
         }
-        leftChild = rope->leftChild();
 
-        if (leftChild->isLinear()) {
-            leftChild->asLinear().mark(gcmarker);
-            return;
+        JSString *left = rope->leftChild();
+        if (left->markIfUnmarked()) {
+            if (left->isLinear()) {
+                ScanLinearString(gcmarker, &left->asLinear());
+            } else {
+                /*
+                 * Both children are ropes, set aside the right one to scan
+                 * it later.
+                 */
+                if (next)
+                    gcmarker->pushRope(next);
+                next = &left->asRope();
+            }
         }
-        rope = &leftChild->asRope();
-    } while (leftChild->markIfUnmarked());
+        rope = next;
+    } while (rope);
 }
 
 static inline void
@@ -787,11 +806,14 @@ PushMarkStack(GCMarker *gcmarker, JSString *str)
 {
     JS_COMPARTMENT_ASSERT_STR(gcmarker->runtime, str);
 
-    if (str->isLinear()) {
-        str->asLinear().mark(gcmarker);
-    } else {
-        JS_ASSERT(str->isRope());
-        if (str->markIfUnmarked())
+    /*
+     * We scan the string directly rather than pushing on the stack except
+     * when we have a rope and both its children are also ropes.
+     */
+    if (str->markIfUnmarked()) {
+        if (str->isLinear())
+            ScanLinearString(gcmarker, &str->asLinear());
+        else
             ScanRope(gcmarker, &str->asRope());
     }
 }
@@ -937,18 +959,41 @@ MarkChildren(JSTracer *trc, JSScript *script)
 
     if (script->types)
         script->types->trace(trc);
+
+    if (script->hasAnyBreakpointsOrStepMode())
+        script->markTrapClosures(trc);
+}
+
+const Shape *
+MarkShapeChildrenAcyclic(JSTracer *trc, const Shape *shape)
+{
+    /*
+     * This function is used by the cycle collector to ensure that we use O(1)
+     * stack space when building the CC graph. It must avoid traversing through
+     * an unbounded number of shapes before reaching an object. (Objects are
+     * added to the CC graph, so reaching one terminates the recursion.)
+     *
+     * Traversing through shape->base() will use bounded space. All but one of
+     * the fields of BaseShape is an object, and objects terminate the
+     * recursion. An owned BaseShape may point to an unowned BaseShape, but
+     * unowned BaseShapes will not point to any other shapes. So the recursion
+     * is bounded.
+     */
+    MarkBaseShapeUnbarriered(trc, shape->base(), "base");
+    MarkIdUnbarriered(trc, shape->maybePropid(), "propid");
+    return shape->previous();
 }
 
 void
 MarkChildren(JSTracer *trc, const Shape *shape)
 {
-restart:
-    MarkBaseShapeUnbarriered(trc, shape->base(), "base");
-    MarkIdUnbarriered(trc, shape->maybePropid(), "propid");
-
-    shape = shape->previous();
-    if (shape)
-        goto restart;
+    /*
+     * We ignore the return value of MarkShapeChildrenAcyclic and use
+     * shape->previous() instead so that the return value has MarkablePtr type.
+     */
+    MarkShapeChildrenAcyclic(trc, shape);
+    if (shape->previous())
+        MarkShape(trc, shape->previous(), "parent");
 }
 
 void

@@ -2714,7 +2714,6 @@ pref("print.print_paper_size", 0);
 // around the content of the page for Print Preview only
 pref("print.print_extra_margin", 0); // twips
 
-pref("font.allow_double_byte_special_chars", true);
 // font names
 
 pref("font.alias-list", "sans,sans-serif,serif,monospace");
@@ -2980,7 +2979,6 @@ pref("print.print_paper_size", 0);
 // around the content of the page for Print Preview only
 pref("print.print_extra_margin", 0); // twips
 
-pref("font.allow_double_byte_special_chars", true);
 // font names
 
 pref("font.alias-list", "sans,sans-serif,serif,monospace");
@@ -3325,6 +3323,8 @@ pref("layers.acceleration.force-enabled", false);
 
 pref("layers.acceleration.draw-fps", false);
 
+pref("layers.offmainthreadcomposition.enabled", false);
+
 #ifdef XP_WIN
 // Whether to disable the automatic detection and use of direct2d.
 #ifdef MOZ_E10S_COMPAT
@@ -3401,3 +3401,9 @@ pref("dom.sms.whitelist", "");
 
 // enable JS dump() function.
 pref("browser.dom.window.dump.enabled", false);
+
+// SPS Profiler
+pref("profiler.enabled", false);
+pref("profiler.interval", 10);
+pref("profiler.entries", 100000);
+

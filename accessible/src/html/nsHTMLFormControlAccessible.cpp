@@ -720,11 +720,11 @@ nsHTMLGroupboxAccessible::NativeRole()
   return nsIAccessibleRole::ROLE_GROUPING;
 }
 
-nsIContent* nsHTMLGroupboxAccessible::GetLegend()
+nsIContent*
+nsHTMLGroupboxAccessible::GetLegend()
 {
-  nsresult count = 0;
-  nsIContent *legendContent = nsnull;
-  while ((legendContent = mContent->GetChildAt(count++)) != nsnull) {
+  for (nsIContent* legendContent = mContent->GetFirstChild(); legendContent;
+       legendContent = legendContent->GetNextSibling()) {
     if (legendContent->NodeInfo()->Equals(nsGkAtoms::legend,
                                           mContent->GetNameSpaceID())) {
       // Either XHTML namespace or no namespace
@@ -792,4 +792,107 @@ PRUint32
 nsHTMLLegendAccessible::NativeRole()
 {
   return nsIAccessibleRole::ROLE_LABEL;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// nsHTMLFigureAccessible
+////////////////////////////////////////////////////////////////////////////////
+
+nsHTMLFigureAccessible::
+  nsHTMLFigureAccessible(nsIContent* aContent, nsIWeakReference* aShell) :
+  nsHyperTextAccessibleWrap(aContent, aShell)
+{
+}
+
+nsresult
+nsHTMLFigureAccessible::GetAttributesInternal(nsIPersistentProperties* aAttributes)
+{
+  nsresult rv = nsHyperTextAccessibleWrap::GetAttributesInternal(aAttributes);
+  NS_ENSURE_SUCCESS(rv, rv);
+
+  // Expose figure xml-role.
+  nsAccUtils::SetAccAttr(aAttributes, nsGkAtoms::xmlroles,
+                         NS_LITERAL_STRING("figure"));
+  return NS_OK;
+}
+
+PRUint32
+nsHTMLFigureAccessible::NativeRole()
+{
+  return nsIAccessibleRole::ROLE_FIGURE;
+}
+
+nsresult
+nsHTMLFigureAccessible::GetNameInternal(nsAString& aName)
+{
+  nsresult rv = nsHyperTextAccessibleWrap::GetNameInternal(aName);
+  NS_ENSURE_SUCCESS(rv, rv);
+
+  if (!aName.IsEmpty())
+    return NS_OK;
+
+  nsIContent* captionContent = Caption();
+  if (captionContent) {
+    return nsTextEquivUtils::
+      AppendTextEquivFromContent(this, captionContent, &aName);
+  }
+
+  return NS_OK;
+}
+
+Relation
+nsHTMLFigureAccessible::RelationByType(PRUint32 aType)
+{
+  Relation rel = nsHyperTextAccessibleWrap::RelationByType(aType);
+  if (aType == nsIAccessibleRelation::RELATION_LABELLED_BY)
+    rel.AppendTarget(Caption());
+
+  return rel;
+}
+
+nsIContent*
+nsHTMLFigureAccessible::Caption() const
+{
+  for (nsIContent* childContent = mContent->GetFirstChild(); childContent;
+       childContent = childContent->GetNextSibling()) {
+    if (childContent->NodeInfo()->Equals(nsGkAtoms::figcaption,
+                                         mContent->GetNameSpaceID())) {
+      return childContent;
+    }
+  }
+
+  return nsnull;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// nsHTMLFigcaptionAccessible
+////////////////////////////////////////////////////////////////////////////////
+
+nsHTMLFigcaptionAccessible::
+  nsHTMLFigcaptionAccessible(nsIContent* aContent, nsIWeakReference* aShell) :
+  nsHyperTextAccessibleWrap(aContent, aShell)
+{
+}
+
+PRUint32
+nsHTMLFigcaptionAccessible::NativeRole()
+{
+  return nsIAccessibleRole::ROLE_CAPTION;
+}
+
+Relation
+nsHTMLFigcaptionAccessible::RelationByType(PRUint32 aType)
+{
+  Relation rel = nsHyperTextAccessibleWrap::RelationByType(aType);
+  if (aType != nsIAccessibleRelation::RELATION_LABEL_FOR)
+    return rel;
+
+  nsAccessible* figure = Parent();
+  if (figure &&
+      figure->GetContent()->NodeInfo()->Equals(nsGkAtoms::figure,
+                                               mContent->GetNameSpaceID())) {
+    rel.AppendTarget(figure);
+  }
+
+  return rel;
 }
