@@ -39,9 +39,9 @@
                  android:persistent="true"
 
 #if MOZILLA_OFFICIAL
-                 android:debuggable="false">
+		 android:debuggable="false">
 #else
-                 android:debuggable="true">
+		 android:debuggable="true">
 #endif
 
         <activity android:name="App"
@@ -55,40 +55,9 @@
                   android:theme="@style/GreyTheme">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-                <action android:name="org.mozilla.gecko.ACTION_ALERT_CLICK" />
-                <action android:name="org.mozilla.gecko.ACTION_ALERT_CLEAR" />
-            </intent-filter>
-        </receiver>
-
-        <activity android:name="Restarter"
-                  android:process="@ANDROID_PACKAGE_NAME@Restarter"
-                  android:theme="@style/GreyTheme"
-                  android:excludeFromRecents="true">
-          <intent-filter>
-            <action android:name="org.mozilla.gecko.restart"/>
-          </intent-filter>
-        </activity>
-
-#if MOZ_CRASHREPORTER
-  <activity android:name="CrashReporter"
-            android:label="@string/crash_reporter_title"
-            android:icon="@drawable/crash_reporter"
-            android:excludeFromRecents="true">
-          <intent-filter>
-            <action android:name="org.mozilla.gecko.reportCrash" />
-          </intent-filter>
-        </activity>
-#endif
 
                 <category android:name="android.intent.category.HOME"/>
                 <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-        </activity>
-        <activity android:name="org.mozilla.gecko.VideoPlayer"
-                  android:configChanges="keyboard|keyboardHidden|mcc|mnc|orientation" 
-                  android:theme="@android:style/Theme.NoTitleBar" >
-            <intent-filter>
-                <action android:name="org.mozilla.gecko.PLAY_VIDEO" />
             </intent-filter>
         </activity>
     </application>
