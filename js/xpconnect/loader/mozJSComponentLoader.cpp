@@ -1,4 +1,4 @@
-/* -*- Mode: C; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 4 -*-
+/* -*- Mode: C; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*-
  *
  * ***** BEGIN LICENSE BLOCK *****
  * Version: MPL 1.1/GPL 2.0/LGPL 2.1
@@ -40,6 +40,8 @@
  * the terms of any one of the MPL, the GPL or the LGPL.
  *
  * ***** END LICENSE BLOCK ***** */
+
+#include "mozilla/Attributes.h"
 
 #ifdef MOZ_LOGGING
 #define FORCE_PR_LOG
@@ -320,8 +322,8 @@ private:
     char*      mBuf;
 
     // prevent copying and assignment
-    JSCLContextHelper(const JSCLContextHelper &); // not implemented
-    const JSCLContextHelper& operator=(const JSCLContextHelper &); // not implemented
+    JSCLContextHelper(const JSCLContextHelper &) MOZ_DELETE;
+    const JSCLContextHelper& operator=(const JSCLContextHelper &) MOZ_DELETE;
 };
 
 
@@ -335,25 +337,20 @@ public:
 private:
     JSContext* mContext;
     JSErrorReporter mOldReporter;
-    // prevent copying and assignment
-    JSCLAutoErrorReporterSetter(const JSCLAutoErrorReporterSetter &); // not implemented
-    const JSCLAutoErrorReporterSetter& operator=(const JSCLAutoErrorReporterSetter &); // not implemented
+
+    JSCLAutoErrorReporterSetter(const JSCLAutoErrorReporterSetter &) MOZ_DELETE;
+    const JSCLAutoErrorReporterSetter& operator=(const JSCLAutoErrorReporterSetter &) MOZ_DELETE;
 };
 
 static nsresult
-ReportOnCaller(nsAXPCNativeCallContext *cc,
+ReportOnCaller(JSContext *callerContext,
                const char *format, ...) {
-    if (!cc) {
+    if (!callerContext) {
         return NS_ERROR_FAILURE;
     }
 
     va_list ap;
     va_start(ap, format);
-
-    nsresult rv;
-    JSContext *callerContext;
-    rv = cc->GetJSContext(&callerContext);
-    NS_ENSURE_SUCCESS(rv, rv);
 
     char *buf = JS_vsmprintf(format, ap);
     if (!buf) {
@@ -641,6 +638,15 @@ class FileMapAutoCloser
  private:
     PRFileMap *mMap;
 };
+#else
+class ANSIFileAutoCloser
+{
+ public:
+    explicit ANSIFileAutoCloser(FILE *file) : mFile(file) {}
+    ~ANSIFileAutoCloser() { fclose(mFile); }
+ private:
+    FILE *mFile;
+};
 #endif
 
 class JSPrincipalsHolder
@@ -845,8 +851,8 @@ mozJSComponentLoader::GlobalForLocation(nsILocalFile *aComponentFile,
 #else  /* HAVE_PR_MEMMAP */
 
             /**
-             * No memmap implementation, so fall back to using
-             * JS_CompileFileHandleForPrincipals().
+             * No memmap implementation, so fall back to 
+             * reading in the file
              */
 
             FILE *fileHandle;
@@ -856,9 +862,35 @@ mozJSComponentLoader::GlobalForLocation(nsILocalFile *aComponentFile,
                 return NS_ERROR_FILE_NOT_FOUND;
             }
 
-            script = JS_CompileFileHandleForPrincipalsVersion(cx, global, nativePath.get(), fileHandle, jsPrincipals, JSVERSION_LATEST);
+            // Ensure file fclose
+            ANSIFileAutoCloser fileCloser(fileHandle);
 
-            /* JS will close the filehandle after compilation is complete. */
+            PRInt64 len;
+            rv = aComponentFile->GetFileSize(&len);
+            if (NS_FAILED(rv) || len < 0) {
+                NS_WARNING("Failed to get file size");
+                JS_SetOptions(cx, oldopts);
+                return NS_ERROR_FAILURE;
+            }
+
+            char *buf = (char *) malloc(len * sizeof(char));
+            if (!buf) {
+                JS_SetOptions(cx, oldopts);
+                return NS_ERROR_FAILURE;
+            }
+
+            size_t rlen = fread(buf, 1, len, fileHandle);
+            if (rlen != (PRUint64)len) {
+                free(buf);
+                JS_SetOptions(cx, oldopts);
+                NS_WARNING("Failed to read file");
+                return NS_ERROR_FAILURE;
+            }
+            script = JS_CompileScriptForPrincipalsVersion(cx, global, jsPrincipals, buf, rlen, nativePath.get(), 1,
+                                                          JSVERSION_LATEST);
+
+            free(buf);
+
 #endif /* HAVE_PR_MEMMAP */
         } else {
             nsCOMPtr<nsIIOService> ioService = do_GetIOService(&rv);
@@ -980,71 +1012,38 @@ mozJSComponentLoader::UnloadModules()
 #endif
 }
 
-/* [JSObject] import (in AUTF8String registryLocation,
-                      [optional] in JSObject targetObj ); */
 NS_IMETHODIMP
-mozJSComponentLoader::Import(const nsACString & registryLocation)
+mozJSComponentLoader::Import(const nsACString& registryLocation,
+                             const JS::Value& targetObj,
+                             JSContext* cx,
+                             PRUint8 optionalArgc,
+                             JS::Value* retval)
 {
-    // This function should only be called from JS.
-    nsresult rv;
-
     NS_TIME_FUNCTION_FMT("%s (line %d) (file: %s)", MOZ_FUNCTION_NAME,
                          __LINE__, registryLocation.BeginReading());
-
-    nsCOMPtr<nsIXPConnect> xpc =
-        do_GetService(kXPConnectServiceContractID, &rv);
-    NS_ENSURE_SUCCESS(rv, rv);
-
-    nsAXPCNativeCallContext *cc = nsnull;
-    rv = xpc->GetCurrentNativeCallContext(&cc);
-    NS_ENSURE_SUCCESS(rv, rv);
-
-#ifdef DEBUG
-    {
-    // ensure that we are being call from JS, from this method
-    nsCOMPtr<nsIInterfaceInfo> info;
-    rv = cc->GetCalleeInterface(getter_AddRefs(info));
-    NS_ENSURE_SUCCESS(rv, rv);
-    nsXPIDLCString name;
-    info->GetName(getter_Copies(name));
-    NS_ASSERTION(nsCRT::strcmp("nsIXPCComponents_Utils", name.get()) == 0,
-                 "Components.utils.import must only be called from JS.");
-    PRUint16 methodIndex;
-    const nsXPTMethodInfo *methodInfo;
-    rv = info->GetMethodInfoForName("import", &methodIndex, &methodInfo);
-    NS_ENSURE_SUCCESS(rv, rv);
-    PRUint16 calleeIndex;
-    rv = cc->GetCalleeMethodIndex(&calleeIndex);
-    NS_ASSERTION(calleeIndex == methodIndex,
-                 "Components.utils.import called from another utils method.");
-    }
-#endif
-
-    JSContext *cx = nsnull;
-    rv = cc->GetJSContext(&cx);
-    NS_ENSURE_SUCCESS(rv, rv);
 
     JSAutoRequest ar(cx);
 
     JSObject *targetObject = nsnull;
 
-    PRUint32 argc = 0;
-    rv = cc->GetArgc(&argc);
-    NS_ENSURE_SUCCESS(rv, rv);
-
-    if (argc > 1) {
+    if (optionalArgc) {
         // The caller passed in the optional second argument. Get it.
-        jsval *argv = nsnull;
-        rv = cc->GetArgvPtr(&argv);
-        NS_ENSURE_SUCCESS(rv, rv);
-        if (!JSVAL_IS_OBJECT(argv[1])) {
-            return ReportOnCaller(cc, ERROR_SCOPE_OBJ,
+        if (!JSVAL_IS_OBJECT(targetObj)) {
+            return ReportOnCaller(cx, ERROR_SCOPE_OBJ,
                                   PromiseFlatCString(registryLocation).get());
         }
-        targetObject = JSVAL_TO_OBJECT(argv[1]);
+        targetObject = JSVAL_TO_OBJECT(targetObj);
     } else {
         // Our targetObject is the caller's global object. Find it by
         // walking the calling object's parent chain.
+        nsresult rv;
+        nsCOMPtr<nsIXPConnect> xpc =
+            do_GetService(kXPConnectServiceContractID, &rv);
+        NS_ENSURE_SUCCESS(rv, rv);
+
+        nsAXPCNativeCallContext *cc = nsnull;
+        rv = xpc->GetCurrentNativeCallContext(&cc);
+        NS_ENSURE_SUCCESS(rv, rv);
 
         nsCOMPtr<nsIXPConnectWrappedNative> wn;
         rv = cc->GetCalleeWrapper(getter_AddRefs(wn));
@@ -1066,17 +1065,14 @@ mozJSComponentLoader::Import(const nsACString & registryLocation)
     }
 
     JSObject *globalObj = nsnull;
-    rv = ImportInto(registryLocation, targetObject, cc, &globalObj);
+    nsresult rv = ImportInto(registryLocation, targetObject, cx, &globalObj);
 
     if (globalObj && !JS_WrapObject(cx, &globalObj)) {
         NS_ERROR("can't wrap return value");
         return NS_ERROR_FAILURE;
     }
 
-    jsval *retval = nsnull;
-    cc->GetRetValPtr(&retval);
-    if (retval)
-        *retval = OBJECT_TO_JSVAL(globalObj);
+    *retval = OBJECT_TO_JSVAL(globalObj);
 
     return rv;
 }
@@ -1087,6 +1083,18 @@ NS_IMETHODIMP
 mozJSComponentLoader::ImportInto(const nsACString & aLocation,
                                  JSObject * targetObj,
                                  nsAXPCNativeCallContext * cc,
+                                 JSObject * *_retval)
+{
+    JSContext *callercx;
+    nsresult rv = cc->GetJSContext(&callercx);
+    NS_ENSURE_SUCCESS(rv, rv);
+    return ImportInto(aLocation, targetObj, callercx, _retval);
+}
+
+nsresult
+mozJSComponentLoader::ImportInto(const nsACString & aLocation,
+                                 JSObject * targetObj,
+                                 JSContext * callercx,
                                  JSObject * *_retval)
 {
     nsresult rv;
@@ -1162,8 +1170,6 @@ mozJSComponentLoader::ImportInto(const nsACString & aLocation,
             if (!JSVAL_IS_VOID(exception)) {
                 // An exception was thrown during compilation. Propagate it
                 // out to our caller so they can report it.
-                JSContext *callercx;
-                cc->GetJSContext(&callercx);
                 JS_SetPendingException(callercx, exception);
                 return NS_OK;
             }

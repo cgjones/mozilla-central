@@ -70,6 +70,8 @@ static const unsigned long kDialogTimerTimeout = 300;
 #define MAX_EXTENSION_LENGTH 10
 #define FILE_BUFFER_SIZE     4096 
 
+typedef DWORD FILEOPENDIALOGOPTIONS;
+
 ///////////////////////////////////////////////////////////////////////////////
 // Helper classes
 
@@ -813,9 +815,6 @@ nsFilePicker::ShowXPFilePicker(const nsString& aInitialDir)
     return true;
   }
 
-  // Clear previous file selection list
-  mFiles.Clear();
-
   // Set user-selected location of file or directory.  From msdn's "Open and
   // Save As Dialog Boxes" section:
   // If you specify OFN_EXPLORER, the directory and file name strings are NULL
@@ -889,7 +888,8 @@ nsFilePicker::ShowFilePicker(const nsString& aInitialDir)
   // options
 
   FILEOPENDIALOGOPTIONS fos = 0;
-  fos |= FOS_SHAREAWARE | FOS_OVERWRITEPROMPT | FOS_NOREADONLYRETURN;
+  fos |= FOS_SHAREAWARE | FOS_OVERWRITEPROMPT |
+         FOS_NOREADONLYRETURN | FOS_FORCEFILESYSTEM;
 
   // Handle add to recent docs settings
   if (IsPrivacyModeEnabled() || !mAddToRecentDocs) {
@@ -1040,7 +1040,9 @@ nsFilePicker::ShowW(PRInt16 *aReturnVal)
     initialDir = mLastUsedUnicodeDirectory;
   }
 
+  // Clear previous file selections
   mUnicodeFile.Truncate();
+  mFiles.Clear();
 
   bool result = false;
    if (mMode == modeGetFolder) {

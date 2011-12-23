@@ -89,6 +89,9 @@ class JaegerCompartment;
 class WeakMapBase;
 class InterpreterFrames;
 
+class ScriptOpcodeCounts;
+struct ScriptOpcodeCountsPair;
+
 /*
  * GetSrcNote cache to avoid O(n^2) growth in finding a source note for a
  * given pc in a script. We use the script->code pointer to tag the cache,
@@ -342,7 +345,8 @@ typedef void
 
 namespace js {
 
-typedef js::Vector<JSCompartment *, 0, js::SystemAllocPolicy> CompartmentVector;
+typedef Vector<JSCompartment *, 0, SystemAllocPolicy> CompartmentVector;
+typedef Vector<ScriptOpcodeCountsPair, 0, SystemAllocPolicy> ScriptOpcodeCountsVector;
 
 }
 
@@ -420,8 +424,13 @@ struct JSRuntime
     size_t              gcMaxBytes;
     size_t              gcMaxMallocBytes;
     uint32_t            gcEmptyArenaPoolLifespan;
-    /* We access this without the GC lock, however a race will not affect correctness */
-    volatile uint32_t   gcNumFreeArenas;
+
+    /*
+     * Number of the committed arenas in all GC chunks including empty chunks.
+     * The counter is volatile as it is read without the GC lock, see comments
+     * in MaybeGC.
+     */
+    volatile uint32_t   gcNumArenasFreeCommitted;
     uint32_t            gcNumber;
     js::GCMarker        *gcIncrementalTracer;
     void                *gcVerifyData;
@@ -529,6 +538,9 @@ struct JSRuntime
     JSTraceDataOp       gcGrayRootsTraceOp;
     void                *gcGrayRootsData;
 
+    /* Strong references on scripts held for PCCount profiling API. */
+    js::ScriptOpcodeCountsVector *scriptPCCounters;
+
     /* Well-known numbers held for use by this runtime's contexts. */
     js::Value           NaNValue;
     js::Value           negativeInfinityValue;
@@ -544,6 +556,9 @@ struct JSRuntime
 
     /* If true, new compartments are initially in debug mode. */
     bool                debugMode;
+
+    /* If true, new scripts must be created with PC counter information. */
+    bool                profilingScripts;
 
     /* Had an out-of-memory error which did not populate an exception. */
     JSBool              hadOutOfMemory;

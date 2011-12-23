@@ -3527,7 +3527,7 @@ nsCSSFrameConstructor::FindHTMLData(Element* aElement,
     SIMPLE_TAG_CREATE(frameset, NS_NewHTMLFramesetFrame),
     SIMPLE_TAG_CREATE(iframe, NS_NewSubDocumentFrame),
     COMPLEX_TAG_CREATE(button, &nsCSSFrameConstructor::ConstructButtonFrame),
-    SIMPLE_TAG_CREATE(canvas, NS_NewHTMLCanvasFrame),
+    SIMPLE_TAG_CHAIN(canvas, nsCSSFrameConstructor::FindCanvasData),
 #if defined(MOZ_MEDIA)
     SIMPLE_TAG_CREATE(video, NS_NewHTMLVideoFrame),
     SIMPLE_TAG_CREATE(audio, NS_NewHTMLVideoFrame),
@@ -3636,6 +3636,20 @@ nsCSSFrameConstructor::FindObjectData(Element* aElement,
 
   return FindDataByInt((PRInt32)type, aElement, aStyleContext,
                        sObjectData, ArrayLength(sObjectData));
+}
+
+/* static */
+const nsCSSFrameConstructor::FrameConstructionData*
+nsCSSFrameConstructor::FindCanvasData(Element* aElement,
+                                      nsStyleContext* aStyleContext)
+{
+  if (!aElement->OwnerDoc()->IsScriptEnabled()) {
+    return nsnull;
+  }
+
+  static const FrameConstructionData sCanvasData =
+    SIMPLE_FCDATA(NS_NewHTMLCanvasFrame);
+  return &sCanvasData;
 }
 
 nsresult
@@ -4698,6 +4712,19 @@ nsCSSFrameConstructor::FindMathMLData(Element* aElement,
 #define SIMPLE_SVG_CREATE(_tag, _func)            \
   { &nsGkAtoms::_tag, SIMPLE_SVG_FCDATA(_func) }
 
+static bool
+IsFilterPrimitiveChildTag(const nsIAtom* aTag)
+{
+  return aTag == nsGkAtoms::feDistantLight ||
+         aTag == nsGkAtoms::fePointLight ||
+         aTag == nsGkAtoms::feSpotLight ||
+         aTag == nsGkAtoms::feFuncR ||
+         aTag == nsGkAtoms::feFuncG ||
+         aTag == nsGkAtoms::feFuncB ||
+         aTag == nsGkAtoms::feFuncA ||
+         aTag == nsGkAtoms::feMergeNode;
+}
+
 /* static */
 const nsCSSFrameConstructor::FrameConstructionData*
 nsCSSFrameConstructor::FindSVGData(Element* aElement,
@@ -4775,21 +4802,22 @@ nsCSSFrameConstructor::FindSVGData(Element* aElement,
     return &sContainerData;
   }
 
-  // Special case for filter primitive elements.
-  // These elements must have a filter element as a parent
+  // Prevent bad frame types being children of filters or parents of filter
+  // primitives:
+  bool parentIsFilter = aParentFrame->GetType() == nsGkAtoms::svgFilterFrame;
   nsCOMPtr<nsIDOMSVGFilterPrimitiveStandardAttributes> filterPrimitive =
     do_QueryInterface(aElement);
-  if (filterPrimitive && aParentFrame->GetType() != nsGkAtoms::svgFilterFrame) {
+  if ((parentIsFilter && !filterPrimitive) ||
+      (!parentIsFilter && filterPrimitive)) {
     return &sSuppressData;
   }
 
-  // Some elements must be children of filter primitive elements.
-  if ((aTag == nsGkAtoms::feDistantLight || aTag == nsGkAtoms::fePointLight ||
-       aTag == nsGkAtoms::feSpotLight ||
-       aTag == nsGkAtoms::feFuncR || aTag == nsGkAtoms::feFuncG ||
-       aTag == nsGkAtoms::feFuncB || aTag == nsGkAtoms::feFuncA ||
-       aTag == nsGkAtoms::feMergeNode) &&
-       aParentFrame->GetType() != nsGkAtoms::svgFEContainerFrame) {
+  // Prevent bad frame types being children of filter primitives or parents of
+  // filter primitive children:
+  bool parentIsFEContainerFrame =
+    aParentFrame->GetType() == nsGkAtoms::svgFEContainerFrame;
+  if ((parentIsFEContainerFrame && !IsFilterPrimitiveChildTag(aTag)) ||
+      (!parentIsFEContainerFrame && IsFilterPrimitiveChildTag(aTag))) {
     return &sSuppressData;
   }
 

@@ -2331,7 +2331,8 @@ DefinePropertyOnObject(JSContext *cx, JSObject *obj, const jsid &id, const PropD
             unchanged |= JSPROP_PERMANENT;
         if (!desc.hasEnumerable)
             unchanged |= JSPROP_ENUMERATE;
-        if (!desc.hasWritable)
+        /* Watch out for accessor -> data transformations here. */
+        if (!desc.hasWritable && shape->isDataDescriptor())
             unchanged |= JSPROP_READONLY;
 
         if (desc.hasValue)
@@ -3196,7 +3197,7 @@ Detecting(JSContext *cx, jsbytecode *pc)
              */
             if (++pc < endpc) {
                 op = JSOp(*pc);
-                return *pc == JSOP_EQ || *pc == JSOP_NE;
+                return op == JSOP_EQ || op == JSOP_NE;
             }
             return JS_FALSE;
 
@@ -5033,7 +5034,7 @@ js_FindClassObject(JSContext *cx, JSObject *start, JSProtoKey protoKey,
     Value v = UndefinedValue();
     if (prop && pobj->isNative()) {
         shape = (Shape *) prop;
-        if (pobj->containsSlot(shape->slot())) {
+        if (shape->hasSlot()) {
             v = pobj->nativeGetSlot(shape->slot());
             if (v.isPrimitive())
                 v.setUndefined();
@@ -5290,7 +5291,7 @@ CallAddPropertyHook(JSContext *cx, Class *clasp, JSObject *obj, const Shape *sha
         if (!CallJSPropertyOp(cx, clasp->addProperty, obj, shape->propid(), vp))
             return false;
         if (*vp != nominal) {
-            if (obj->containsSlot(shape->slot()))
+            if (shape->hasSlot())
                 obj->nativeSetSlotWithType(cx, shape, *vp);
         }
     }
@@ -5420,7 +5421,7 @@ DefineNativeProperty(JSContext *cx, JSObject *obj, jsid id, const Value &value,
     }
 
     /* Store valueCopy before calling addProperty, in case the latter GC's. */
-    if (shape->hasSlot() && obj->containsSlot(shape->slot()))
+    if (shape->hasSlot())
         obj->nativeSetSlot(shape->slot(), valueCopy);
 
     /* XXXbe called with lock held */
@@ -5855,7 +5856,6 @@ js_NativeSet(JSContext *cx, JSObject *obj, const Shape *shape, bool added, bool 
 
     if (shape->hasSlot()) {
         uint32_t slot = shape->slot();
-        JS_ASSERT(obj->containsSlot(slot));
 
         /* If shape has a stub setter, just store *vp. */
         if (shape->hasDefaultSetter()) {
@@ -6337,7 +6337,7 @@ js_SetPropertyHelper(JSContext *cx, JSObject *obj, jsid id, uintN defineHow,
          * Note that we store before calling addProperty, to match the order
          * in DefineNativeProperty.
          */
-        if (obj->containsSlot(shape->slot()))
+        if (shape->hasSlot())
             obj->nativeSetSlot(shape->slot(), UndefinedValue());
 
         /* XXXbe called with obj locked */
@@ -6464,12 +6464,7 @@ js_DeleteProperty(JSContext *cx, JSObject *obj, jsid id, Value *rval, JSBool str
         return true;
     }
 
-    if (!CallJSPropertyOp(cx, obj->getClass()->delProperty, obj, shape->getUserId(), rval))
-        return false;
-    if (rval->isFalse())
-        return true;
-
-    if (shape->hasSlot() && obj->containsSlot(shape->slot())) {
+    if (shape->hasSlot()) {
         const Value &v = obj->nativeGetSlot(shape->slot());
         GCPoke(cx, v);
 
@@ -6503,6 +6498,11 @@ js_DeleteProperty(JSContext *cx, JSObject *obj, jsid id, Value *rval, JSBool str
         }
     }
 
+    if (!CallJSPropertyOp(cx, obj->getClass()->delProperty, obj, shape->getUserId(), rval))
+        return false;
+    if (rval->isFalse())
+        return true;
+
     return obj->removeProperty(cx, id) && js_SuppressDeletedProperty(cx, obj, id);
 }
 
@@ -6522,7 +6522,6 @@ HasDataProperty(JSContext *cx, JSObject *obj, jsid methodid, Value *vp)
 {
     if (const Shape *shape = obj->nativeLookup(cx, methodid)) {
         if (shape->hasDefaultGetterOrIsMethod() && shape->hasSlot()) {
-            JS_ASSERT(obj->containsSlot(shape->slot()));
             *vp = obj->nativeGetSlot(shape->slot());
             return true;
         }
@@ -6966,10 +6965,8 @@ js_PrintObjectSlotName(JSTracer *trc, char *buf, size_t bufsize)
     const Shape *shape;
     if (obj->isNative()) {
         shape = obj->lastProperty();
-        while (shape->previous() && shape->maybeSlot() != slot)
+        while (shape && (!shape->hasSlot() || shape->slot() != slot))
             shape = shape->previous();
-        if (shape->maybeSlot() != slot)
-            shape = NULL;
     } else {
         shape = NULL;
     }
@@ -7026,8 +7023,8 @@ js_ClearNative(JSContext *cx, JSObject *obj)
         if (shape->isDataDescriptor() &&
             shape->writable() &&
             shape->hasDefaultSetter() &&
-            obj->containsSlot(shape->maybeSlot())) {
-            obj->setSlot(shape->slot(), UndefinedValue());
+            shape->hasSlot()) {
+            obj->nativeSetSlot(shape->slot(), UndefinedValue());
         }
     }
     return true;
@@ -7294,7 +7291,7 @@ DumpProperty(JSObject *obj, const Shape &shape)
 
     uint32_t slot = shape.hasSlot() ? shape.maybeSlot() : SHAPE_INVALID_SLOT;
     fprintf(stderr, ": slot %d", slot);
-    if (obj->containsSlot(slot)) {
+    if (shape.hasSlot()) {
         fprintf(stderr, " = ");
         dumpValue(obj->getSlot(slot));
     } else if (slot != SHAPE_INVALID_SLOT) {
@@ -7405,7 +7402,6 @@ js_DumpStackFrame(JSContext *cx, StackFrame *start)
             fprintf(stderr, "no stack for cx = %p\n", (void*) cx);
             return;
         }
-        start = i.fp();
     } else {
         while (!i.done() && i.fp() != start)
             ++i;

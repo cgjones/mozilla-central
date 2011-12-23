@@ -248,25 +248,24 @@ public class PanZoomController
         }
     }
 
-    public void geometryChanged(boolean abortAnimation) {
-        if (abortAnimation) {
-            // this happens when gecko changes the viewport on us or if the device is rotated.
-            // if that's the case, abort any animation in progress and re-zoom so that the page
-            // snaps to edges. for other cases (where the user's finger(s) are down) don't do
-            // anything special.
-            switch (mState) {
-            case FLING:
-                mX.velocity = mY.velocity = 0.0f;
-                mState = PanZoomState.NOTHING;
-                // fall through
-            case ANIMATED_ZOOM:
-                // the zoom that's in progress likely makes no sense any more (such as if
-                // the screen orientation changed) so abort it and start a new one to
-                // ensure the viewport doesn't contain out-of-bounds areas
-            case NOTHING:
-                bounce();
-                break;
-            }
+    /** This function must be called from the UI thread. */
+    public void abortAnimation() {
+        // this happens when gecko changes the viewport on us or if the device is rotated.
+        // if that's the case, abort any animation in progress and re-zoom so that the page
+        // snaps to edges. for other cases (where the user's finger(s) are down) don't do
+        // anything special.
+        switch (mState) {
+        case FLING:
+            mX.velocity = mY.velocity = 0.0f;
+            mState = PanZoomState.NOTHING;
+            // fall through
+        case ANIMATED_ZOOM:
+            // the zoom that's in progress likely makes no sense any more (such as if
+            // the screen orientation changed) so abort it and start a new one to
+            // ensure the viewport doesn't contain out-of-bounds areas
+        case NOTHING:
+            bounce();
+            break;
         }
     }
 
@@ -275,6 +274,7 @@ public class PanZoomController
      */
 
     private boolean onTouchStart(MotionEvent event) {
+        Log.d(LOGTAG, "onTouchStart in state " + mState);
         // user is taking control of movement, so stop
         // any auto-movement we have going
         stopAnimationTimer();
@@ -306,6 +306,8 @@ public class PanZoomController
     }
 
     private boolean onTouchMove(MotionEvent event) {
+        Log.d(LOGTAG, "onTouchMove in state " + mState);
+
         switch (mState) {
         case NOTHING:
         case FLING:
@@ -341,6 +343,8 @@ public class PanZoomController
     }
 
     private boolean onTouchEnd(MotionEvent event) {
+        Log.d(LOGTAG, "onTouchEnd in " + mState);
+
         switch (mState) {
         case NOTHING:
         case FLING:
@@ -384,6 +388,8 @@ public class PanZoomController
     }
 
     private boolean onTouchCancel(MotionEvent event) {
+        Log.d(LOGTAG, "onTouchCancel in " + mState);
+
         mState = PanZoomState.NOTHING;
         // ensure we snap back if we're overscrolled
         bounce();
@@ -402,6 +408,12 @@ public class PanZoomController
     }
 
     private void track(float x, float y, float lastX, float lastY, float timeDelta) {
+        if (FloatUtils.fuzzyEquals(timeDelta, 0)) {
+            // probably a duplicate event, ignore it. using a zero timeDelta will mess
+            // up our velocity
+            return;
+        }
+
         if (mState == PanZoomState.PANNING_LOCKED) {
             // check to see if we should break the axis lock
             double angle = Math.atan2(y - mY.firstTouchPos, x - mX.firstTouchPos); // range [-pi, pi]
@@ -506,11 +518,17 @@ public class PanZoomController
     private void bounce(ViewportMetrics metrics) {
         stopAnimationTimer();
 
+        mBounceStartMetrics = new ViewportMetrics(mController.getViewportMetrics());
+        if (mBounceStartMetrics.fuzzyEquals(metrics)) {
+            mState = PanZoomState.NOTHING;
+            return;
+        }
+
         mBounceFrame = 0;
         mState = PanZoomState.FLING;
         mX.setFlingState(Axis.FlingStates.SNAPPING); mY.setFlingState(Axis.FlingStates.SNAPPING);
-        mBounceStartMetrics = new ViewportMetrics(mController.getViewportMetrics());
         mBounceEndMetrics = metrics;
+        Log.d(LOGTAG, "end bounce at " + mBounceEndMetrics);
 
         startAnimationTimer(new BounceRunnable());
     }
@@ -599,6 +617,7 @@ public class PanZoomController
             /* Finally, if there's nothing else to do, complete the animation and go to sleep. */
             finishBounce();
             finishAnimation();
+            mState = PanZoomState.NOTHING;
         }
 
         /* Performs one frame of a bounce animation. */
@@ -666,15 +685,17 @@ public class PanZoomController
              */
             boolean overscrolledX = mX.getOverscroll() != Axis.Overscroll.NONE;
             boolean overscrolledY = mY.getOverscroll() != Axis.Overscroll.NONE;
-            if (!mOverridePanning && (overscrolledX || overscrolledY))
+            if (!mOverridePanning && (overscrolledX || overscrolledY)) {
                 bounce();
-            else
+            } else {
                 finishAnimation();
+                mState = PanZoomState.NOTHING;
+            }
         }
     }
 
     private void finishAnimation() {
-        mState = PanZoomState.NOTHING;
+        Log.d(LOGTAG, "Finishing animation at " + mController.getViewportMetrics());
         stopAnimationTimer();
 
         // Force a viewport synchronisation
@@ -836,6 +857,7 @@ public class PanZoomController
     /* Returns the nearest viewport metrics with no overscroll visible. */
     private ViewportMetrics getValidViewportMetrics() {
         ViewportMetrics viewportMetrics = new ViewportMetrics(mController.getViewportMetrics());
+        Log.d(LOGTAG, "generating valid viewport using " + viewportMetrics);
 
         /* First, we adjust the zoom factor so that we can make no overscrolled area visible. */
         float zoomFactor = viewportMetrics.getZoomFactor();
@@ -862,6 +884,7 @@ public class PanZoomController
 
         /* Now we pan to the right origin. */
         viewportMetrics.setViewport(viewportMetrics.getClampedViewport());
+        Log.d(LOGTAG, "generated valid viewport as " + viewportMetrics);
 
         return viewportMetrics;
     }
@@ -889,10 +912,18 @@ public class PanZoomController
      */
     @Override
     public boolean onScale(ScaleGestureDetector detector) {
+        Log.d(LOGTAG, "onScale in state " + mState);
+
         if (mState == PanZoomState.ANIMATED_ZOOM)
             return false;
 
-        float spanRatio = detector.getCurrentSpan() / detector.getPreviousSpan();
+        float prevSpan = detector.getPreviousSpan();
+        if (FloatUtils.fuzzyEquals(prevSpan, 0.0f)) {
+            // let's eat this one to avoid setting the new zoom to infinity (bug 711453)
+            return true;
+        }
+
+        float spanRatio = detector.getCurrentSpan() / prevSpan;
 
         /*
          * Apply edge resistance if we're zoomed out smaller than the page size by scaling the zoom
@@ -920,6 +951,8 @@ public class PanZoomController
 
     @Override
     public boolean onScaleBegin(ScaleGestureDetector detector) {
+        Log.d(LOGTAG, "onScaleBegin in " + mState);
+
         if (mState == PanZoomState.ANIMATED_ZOOM)
             return false;
 
@@ -933,6 +966,8 @@ public class PanZoomController
 
     @Override
     public void onScaleEnd(ScaleGestureDetector detector) {
+        Log.d(LOGTAG, "onScaleEnd in " + mState);
+
         PointF o = mController.getOrigin();
         if (mState == PanZoomState.ANIMATED_ZOOM)
             return;
@@ -1038,7 +1073,7 @@ public class PanZoomController
         return true;
     }
 
-    public boolean animatedZoomTo(RectF zoomToRect) {
+    private boolean animatedZoomTo(RectF zoomToRect) {
         GeckoApp.mAppContext.hidePluginViews();
 
         mState = PanZoomState.ANIMATED_ZOOM;

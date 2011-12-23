@@ -2117,8 +2117,9 @@ nsContentUtils::SplitQName(const nsIContent* aNamespaceResolver,
     const PRUnichar* end;
     aQName.EndReading(end);
     nsAutoString nameSpace;
-    rv = aNamespaceResolver->LookupNamespaceURI(Substring(aQName.get(), colon),
-                                                nameSpace);
+    rv = aNamespaceResolver->LookupNamespaceURIInternal(Substring(aQName.get(),
+                                                                  colon),
+                                                        nameSpace);
     NS_ENSURE_SUCCESS(rv, rv);
 
     *aNamespace = NameSpaceManager()->GetNameSpaceID(nameSpace);
@@ -2830,7 +2831,7 @@ nsContentUtils::ReportToConsole(PRUint32 aErrorFlags,
   if (aURI)
     aURI->GetSpec(spec);
 
-  nsCOMPtr<nsIScriptError2> errorObject =
+  nsCOMPtr<nsIScriptError> errorObject =
       do_CreateInstance(NS_SCRIPTERROR_CONTRACTID, &rv);
   NS_ENSURE_SUCCESS(rv, rv);
 
@@ -2842,8 +2843,7 @@ nsContentUtils::ReportToConsole(PRUint32 aErrorFlags,
                                      innerWindowID);
   NS_ENSURE_SUCCESS(rv, rv);
 
-  nsCOMPtr<nsIScriptError> logError = do_QueryInterface(errorObject);
-  return sConsoleService->LogMessage(logError);
+  return sConsoleService->LogMessage(errorObject);
 }
 
 bool

@@ -62,6 +62,7 @@ import android.text.SpannableString;
 import android.text.style.UnderlineSpan;
 import android.util.AttributeSet;
 import android.util.Log;
+import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
@@ -81,8 +82,6 @@ public class AboutHomeContent extends ScrollView {
     private static final int NUMBER_OF_COLS_PORTRAIT = 2;
     private static final int NUMBER_OF_COLS_LANDSCAPE = 3;
 
-    private boolean mInflated;
-
     private Cursor mCursor;
     UriLoadCallback mUriLoadCallback = null;
 
@@ -98,50 +97,47 @@ public class AboutHomeContent extends ScrollView {
 
     public AboutHomeContent(Context context, AttributeSet attrs) {
         super(context, attrs);
-        mInflated = false;
+        setScrollContainer(true);
+        setBackgroundResource(R.drawable.abouthome_bg_repeat);
     }
 
     @Override
     protected void onFinishInflate() {
         super.onFinishInflate();
+        synchronized (this) {
+            if (mTopSitesGrid != null && mAddonsList != null)
+                return;
 
-        // HACK: Without this, the onFinishInflate is called twice
-        // This issue is due to a bug when Android inflates a layout with a
-        // parent. Fixed in Honeycomb
-        if (mInflated)
-            return;
+            mTopSitesGrid = (GridView)findViewById(R.id.top_sites_grid);
+            mTopSitesGrid.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+                public void onItemClick(AdapterView<?> parent, View v, int position, long id) {
+                    Cursor c = (Cursor) parent.getItemAtPosition(position);
 
-        mInflated = true;
+                    String spec = c.getString(c.getColumnIndex(URLColumns.URL));
+                    Log.i(LOGTAG, "clicked: " + spec);
 
-        mTopSitesGrid = (GridView)findViewById(R.id.top_sites_grid);
-        mTopSitesGrid.setOnItemClickListener(new AdapterView.OnItemClickListener() {
-            public void onItemClick(AdapterView<?> parent, View v, int position, long id) {
-                Cursor c = (Cursor) parent.getItemAtPosition(position);
+                    if (mUriLoadCallback != null)
+                        mUriLoadCallback.callback(spec);
+                }
+            });
 
-                String spec = c.getString(c.getColumnIndex(URLColumns.URL));
-                Log.i(LOGTAG, "clicked: " + spec);
+            mAddonsList = (ListView) findViewById(R.id.recommended_addons_list);
 
-                if (mUriLoadCallback != null)
-                    mUriLoadCallback.callback(spec);
-            }
-        });
+            TextView allTopSitesText = (TextView) findViewById(R.id.all_top_sites_text);
+            allTopSitesText.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) {
+                    GeckoApp.mAppContext.showAwesomebar(AwesomeBar.Type.EDIT);
+                }
+            });
 
-        mAddonsList = (ListView) findViewById(R.id.recommended_addons_list);
-
-        TextView allTopSitesText = (TextView) findViewById(R.id.all_top_sites_text);
-        allTopSitesText.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) {
-                GeckoApp.mAppContext.showAwesomebar(AwesomeBar.Type.EDIT);
-            }
-        });
-
-        TextView allAddonsText = (TextView) findViewById(R.id.all_addons_text);
-        allAddonsText.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) {
-                if (mUriLoadCallback != null)
-                    mUriLoadCallback.callback("about:addons");
-            }
-        });
+            TextView allAddonsText = (TextView) findViewById(R.id.all_addons_text);
+            allAddonsText.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) {
+                    if (mUriLoadCallback != null)
+                        mUriLoadCallback.callback("about:addons");
+                }
+            });
+        }
     }
 
     private int getNumberOfTopSites() {
@@ -161,7 +157,11 @@ public class AboutHomeContent extends ScrollView {
     }
 
     void init(final Activity activity) {
-        GeckoAppShell.getHandler().post(new Runnable() {
+        LayoutInflater inflater =
+            (LayoutInflater) activity.getSystemService(Context.LAYOUT_INFLATER_SERVICE);
+
+        inflater.inflate(R.layout.abouthome_content, this);
+        final Runnable generateCursorsRunnable = new Runnable() {
             public void run() {
                 if (mCursor != null)
                     activity.stopManagingCursor(mCursor);
@@ -193,7 +193,14 @@ public class AboutHomeContent extends ScrollView {
 
                 readRecommendedAddons(activity);
             }
-        });
+        };
+        Runnable finishInflateRunnable = new Runnable() {
+            public void run() {
+                onFinishInflate();
+                GeckoAppShell.getHandler().post(generateCursorsRunnable);
+            }
+        };
+        GeckoApp.mAppContext.mMainHandler.post(finishInflateRunnable);
     }
 
     public void setUriLoadCallback(UriLoadCallback uriLoadCallback) {
@@ -210,64 +217,67 @@ public class AboutHomeContent extends ScrollView {
 
     @Override
     public void onConfigurationChanged(Configuration newConfig) {
-        mTopSitesGrid.setNumColumns(getNumberOfColumns());
-        mTopSitesAdapter.notifyDataSetChanged();
+        if (mTopSitesGrid != null) 
+            mTopSitesGrid.setNumColumns(getNumberOfColumns());
+        if (mTopSitesAdapter != null)
+            mTopSitesAdapter.notifyDataSetChanged();
 
         super.onConfigurationChanged(newConfig);
-    }
-
-    InputStream getProfileRecommendedAddonsStream() {
-        try {
-            File profileDir = GeckoApp.mAppContext.getProfileDir();
-            if (profileDir == null)
-                return null;
-            File recommendedAddonsFile = new File(profileDir, "recommended-addons.json");
-            if (!recommendedAddonsFile.exists())
-                return null;
-            return new FileInputStream(recommendedAddonsFile);
-        } catch (FileNotFoundException fnfe) {
-            // ignore
-        }
-        return null;
-    }
-
-    InputStream getRecommendedAddonsStream(Activity activity) throws Exception{
-        InputStream is = getProfileRecommendedAddonsStream();
-        if (is != null)
-            return is;
-        File applicationPackage = new File(activity.getApplication().getPackageResourcePath());
-        ZipFile zip = new ZipFile(applicationPackage);
-        if (zip == null)
-            return null;
-        ZipEntry fileEntry = zip.getEntry("recommended-addons.json");
-        if (fileEntry == null)
-            return null;
-        return zip.getInputStream(fileEntry);
     }
 
     void readRecommendedAddons(final Activity activity) {
         GeckoAppShell.getHandler().post(new Runnable() {
             public void run() {
+                byte[] buf = new byte[32768];
+                InputStream fileStream = null;
+                ZipFile zip = null;
+                StringBuffer jsonString = null;
+                File profileDir = GeckoApp.mAppContext.getProfileDir();
                 try {
-                    byte[] buf = new byte[32768];
-                    InputStream fileStream = getRecommendedAddonsStream(activity);
+                    if (profileDir != null) {
+                        try {
+                            File recommendedAddonsFile = new File(profileDir, "recommended-addons.json");
+                            if (recommendedAddonsFile.exists()) {
+                                fileStream = new FileInputStream(recommendedAddonsFile);
+                            }
+                        } catch (FileNotFoundException fnfe) {}
+                    }
+                    if (fileStream == null) {
+                        Log.i("Addons", "filestream is null");
+                        File applicationPackage = new File(activity.getApplication().getPackageResourcePath());
+                        zip = new ZipFile(applicationPackage);
+                        if (zip == null)
+                            return;
+                        ZipEntry fileEntry = zip.getEntry("recommended-addons.json");
+                        if (fileEntry == null)
+                            return;
+                        fileStream = zip.getInputStream(fileEntry);
+                    }
+
                     if (fileStream == null)
                         return;
-                    StringBuffer jsonString = new StringBuffer();
-                    try {
-                        int read = 0;
-                        while ((read = fileStream.read(buf, 0, 32768)) != -1) {
-                            jsonString.append(new String(buf, 0, read));
-                        }
-                    } finally {
-                        try {
-                            fileStream.close();
-                        } catch (IOException ioe) {
-                            // catch this here because we can continue even if the
-                            // close failed
-                            Log.i(LOGTAG, "error closing json file", ioe);
-                        }
+                    jsonString = new StringBuffer();
+                    int read = 0;
+                    while ((read = fileStream.read(buf, 0, 32768)) != -1) {
+                        jsonString.append(new String(buf, 0, read));
                     }
+                } catch (IOException ioe) {
+                    Log.i(LOGTAG, "error reading recommended addons file", ioe);
+                } finally {
+                    try {
+                        if (fileStream != null)
+                            fileStream.close();
+                        if (zip != null)
+                            zip.close();
+                    } catch (IOException ioe) {
+                        // catch this here because we can continue even if the
+                        // close failed
+                        Log.i(LOGTAG, "error closing json file", ioe);
+                    }
+                } 
+                if (jsonString == null)
+                    return;
+                try {
                     final JSONArray array = new JSONObject(jsonString.toString()).getJSONArray("addons");
                     GeckoApp.mAppContext.mMainHandler.post(new Runnable() {
                         public void run() {
@@ -299,14 +309,14 @@ public class AboutHomeContent extends ScrollView {
             // This is to ensure that the GridView always has a size that shows
             // all items with no need for scrolling.
             int expandedHeightSpec = MeasureSpec.makeMeasureSpec(Integer.MAX_VALUE >> 2,
-                    MeasureSpec.AT_MOST);
+                                                                 MeasureSpec.AT_MOST);
             super.onMeasure(widthMeasureSpec, expandedHeightSpec);
         }
     }
 
     public class TopSitesCursorAdapter extends SimpleCursorAdapter {
         public TopSitesCursorAdapter(Context context, int layout, Cursor c,
-                String[] from, int[] to) {
+                                     String[] from, int[] to) {
             super(context, layout, c, from, to);
         }
 
@@ -378,7 +388,7 @@ public class AboutHomeContent extends ScrollView {
             // This is to ensure that the ListView always has a size that shows
             // all items with no need for scrolling.
             int expandedHeightSpec = MeasureSpec.makeMeasureSpec(Integer.MAX_VALUE >> 2,
-                    MeasureSpec.AT_MOST);
+                                                                 MeasureSpec.AT_MOST);
             super.onMeasure(widthMeasureSpec, expandedHeightSpec);
         }
     }

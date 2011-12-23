@@ -46,6 +46,8 @@
 #ifndef xpcprivate_h___
 #define xpcprivate_h___
 
+#include "mozilla/Attributes.h"
+
 #include <string.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -1036,9 +1038,6 @@ public:
     NS_IMETHOD GetJSContext(JSContext **aResult);
     NS_IMETHOD GetArgc(PRUint32 *aResult);
     NS_IMETHOD GetArgvPtr(jsval **aResult);
-    NS_IMETHOD GetRetValPtr(jsval **aResult);
-    NS_IMETHOD GetReturnValueWasSet(bool *aResult);
-    NS_IMETHOD SetReturnValueWasSet(bool aValue);
     NS_IMETHOD GetCalleeInterface(nsIInterfaceInfo **aResult);
     NS_IMETHOD GetCalleeClassInfo(nsIClassInfo **aResult);
     NS_IMETHOD GetPreviousCallContext(nsAXPCNativeCallContext **aResult);
@@ -1100,7 +1099,6 @@ public:
     inline uintN                        GetArgc() const ;
     inline jsval*                       GetArgv() const ;
     inline jsval*                       GetRetVal() const ;
-    inline JSBool                       GetReturnValueWasSet() const ;
 
     inline PRUint16                     GetMethodIndex() const ;
     inline void                         SetMethodIndex(PRUint16 index) ;
@@ -1217,7 +1215,6 @@ private:
     jsval*                          mArgv;
     jsval*                          mRetVal;
 
-    JSBool                          mReturnValueWasSet;
     PRUint16                        mMethodIndex;
 
 #define XPCCCX_STRING_CACHE_SIZE 2
@@ -3941,8 +3938,7 @@ xpc_InstallJSDebuggerKeywordHandler(JSRuntime* rt);
 
 // Definition of nsScriptError, defined here because we lack a place to put
 // XPCOM objects associated with the JavaScript engine.
-class nsScriptError : public nsIScriptError,
-                      public nsIScriptError2 {
+class nsScriptError : public nsIScriptError {
 public:
     nsScriptError();
 
@@ -3953,7 +3949,6 @@ public:
     NS_DECL_ISUPPORTS
     NS_DECL_NSICONSOLEMESSAGE
     NS_DECL_NSISCRIPTERROR
-    NS_DECL_NSISCRIPTERROR2
 
 private:
     nsString mMessage;
@@ -3965,7 +3960,7 @@ private:
     nsCString mCategory;
     PRUint64 mOuterWindowID;
     PRUint64 mInnerWindowID;
-    PRUint64 mTimeStamp;
+    PRInt64 mTimeStamp;
 };
 
 /***************************************************************************/
@@ -4031,8 +4026,8 @@ private:
     MOZILLA_DECL_USE_GUARD_OBJECT_NOTIFIER
 
     // No copying or assignment allowed
-    AutoScriptEvaluate(const AutoScriptEvaluate &);
-    AutoScriptEvaluate & operator =(const AutoScriptEvaluate &);
+    AutoScriptEvaluate(const AutoScriptEvaluate &) MOZ_DELETE;
+    AutoScriptEvaluate & operator =(const AutoScriptEvaluate &) MOZ_DELETE;
 };
 
 /***************************************************************************/

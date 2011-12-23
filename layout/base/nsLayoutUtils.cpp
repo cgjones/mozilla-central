@@ -4111,11 +4111,8 @@ nsLayoutUtils::SurfaceFromElement(dom::Element* aElement,
   result.mSurface = gfxsurf;
   result.mSize = gfxIntSize(imgWidth, imgHeight);
   result.mPrincipal = principal.forget();
-  // SVG images could have <foreignObject> and/or <image> elements that load
-  // content from another domain.  For safety, they make the canvas write-only.
-  // XXXdholbert We could probably be more permissive here if we check that our
-  // helper SVG document has no elements that could load remote content.
-  result.mIsWriteOnly = (imgContainer->GetType() == imgIContainer::TYPE_VECTOR);
+  // no images, including SVG images, can load content from another domain.
+  result.mIsWriteOnly = false;
   result.mImageRequest = imgRequest.forget();
 
   return result;
@@ -4230,7 +4227,7 @@ nsLayoutUtils::GetFontFacesForFrames(nsIFrame* aFrame,
   while (aFrame) {
     nsIFrame::ChildListID childLists[] = { nsIFrame::kPrincipalList,
                                            nsIFrame::kPopupList };
-    for (int i = 0; i < ArrayLength(childLists); ++i) {
+    for (size_t i = 0; i < ArrayLength(childLists); ++i) {
       nsFrameList children(aFrame->GetChildList(childLists[i]));
       for (nsFrameList::Enumerator e(children); !e.AtEnd(); e.Next()) {
         nsIFrame* child = e.get();
@@ -4509,9 +4506,14 @@ MinimumFontSizeFor(nsPresContext* aPresContext, nscoord aContainerWidth)
   if (sFontSizeInflationEmPerLine == 0 && sFontSizeInflationMinTwips == 0) {
     return 0;
   }
+
+  // Clamp the container width to the device dimensions
+  nscoord iFrameWidth = aPresContext->GetVisibleArea().width;
+  nscoord effectiveContainerWidth = NS_MIN(iFrameWidth, aContainerWidth);
+
   nscoord byLine = 0, byInch = 0;
   if (sFontSizeInflationEmPerLine != 0) {
-    byLine = aContainerWidth / sFontSizeInflationEmPerLine;
+    byLine = effectiveContainerWidth / sFontSizeInflationEmPerLine;
   }
   if (sFontSizeInflationMinTwips != 0) {
     // REVIEW: Is this giving us app units and sizes *not* counting
@@ -4521,7 +4523,7 @@ MinimumFontSizeFor(nsPresContext* aPresContext, nscoord aContainerWidth)
     dx->GetClientRect(clientRect); // FIXME: GetClientRect looks expensive
     float deviceWidthInches =
       float(clientRect.width) / float(dx->AppUnitsPerPhysicalInch());
-    byInch = NSToCoordRound(aContainerWidth /
+    byInch = NSToCoordRound(effectiveContainerWidth /
                             (deviceWidthInches * 1440 /
                              sFontSizeInflationMinTwips ));
   }

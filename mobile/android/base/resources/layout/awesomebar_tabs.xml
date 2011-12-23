@@ -6,9 +6,7 @@
                   android:layout_height="fill_parent">
 
         <TabWidget android:id="@android:id/tabs"
-                   android:layout_width="fill_parent"
-                   android:layout_height="wrap_content"
-                   android:background="@color/awesomebar_background"/>
+                   style="@style/TabWidget"/>
 
         <FrameLayout android:id="@android:id/tabcontent"
                      android:layout_width="fill_parent"
