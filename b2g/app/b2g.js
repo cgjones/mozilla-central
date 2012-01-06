@@ -391,5 +391,10 @@ pref("layers.acceleration.force-enabled", true);
 pref("dom.screenEnabledProperty.enabled", true);
 pref("dom.screenBrightnessProperty.enabled", true);
 
+//Enable/disable marionette server, set listening port
+pref("marionette.server.enabled", true);
+pref("marionette.server.port", 2828);
+
 // Ignore X-Frame-Options headers.
 pref("b2g.ignoreXFrameOptions", true);
+

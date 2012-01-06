@@ -502,6 +502,15 @@ MAKEFILES_xulapp="
   toolkit/xre/Makefile
 "
 
+MAKEFILES_jsctypes="
+  toolkit/components/ctypes/Makefile
+  toolkit/components/ctypes/tests/Makefile
+"
+
+MAKEFILES_debugger="
+  toolkit/devtools/debugger/Makefile
+"
+
 MAKEFILES_jsreflect="
   toolkit/components/reflect/Makefile
 "
