@@ -46,6 +46,9 @@ pref("browser.homescreenURL", "file:///system/home/homescreen.html");
 pref("browser.homescreenURL", "file:///data/local/homescreen.html,file:///system/home/homescreen.html");
 #endif
 
+// URL for the dialer application.
+pref("dom.telephony.app.phone.url", "http://localhost:6666/apps/dialer/dialer.html");
+
 // Device pixel to CSS px ratio, in percent. Set to -1 to calculate based on display density.
 pref("browser.viewport.scaleRatio", -1);
 
@@ -398,3 +401,6 @@ pref("marionette.server.port", 2828);
 // Ignore X-Frame-Options headers.
 pref("b2g.ignoreXFrameOptions", true);
 
+// Temporary permission hack for WebSMS
+pref("dom.sms.enabled", true);
+pref("dom.sms.whitelist", "file://,http://localhost:6666");
