@@ -57,6 +57,11 @@ var xulAppInfo = Cc["@mozilla.org/xre/app-info;1"]
                  .getService(Ci.nsIXULAppInfo);
 var isB2G = xulAppInfo.name.indexOf('B2G') > -1;
 
+if (isB2G) {
+  // prevent 'slow script' dialogs
+  prefs.setIntPref("dom.max_script_run_time", 180);
+}
+
 Cu.import("resource:///modules/marionette-logger.jsm");
 MarionetteLogger.write('marionette-actors.js loaded');
 
@@ -145,38 +150,10 @@ MarionetteDriverActor.prototype = {
   //We will only ever be running one browser at a time
   //If no browser is running (ie: in B2G) start one up
   newSession: function MDA_newSession(aRequest) {
-    if (isB2G) {
-      if (!prefs.getBoolPref("marionette.contentListener")) {
-        this.messageManager.loadFrameScript("resource:///modules/marionette-listener.js", false);
-        prefs.setBoolPref("marionette.contentListener", true);
-        // prevent 'slow script' dialogs
-        prefs.setIntPref("dom.max_script_run_time", 180);
-      }
-    } else {
-      //XXX: this doesn't work in b2g
-      //TODO: check if browser has started, if not, kick it off
-      var WindowMediator = Cc['@mozilla.org/appshell/window-mediator;1']  
-                           .getService(Ci.nsIWindowMediator);  
-      var win = WindowMediator.getMostRecentWindow('navigator:browser');
-      if(win.gBrowser != undefined) {
-        this.browser = win.gBrowser; 
-      }
-      else {
-        this.browser = win.Browser; //BrowserApp for birch?
-      }
-
-      this.tab = this.browser.addTab("about:blank", true);
-      /* we only need one instance of each listener running in content space */
-      if (!prefs.getBoolPref("marionette.contentListener")) {
-        if(win.gBrowser != undefined) {
-          this.browser.getBrowserForTab(this.tab).messageManager.loadFrameScript("resource:///modules/marionette-listener.js", false);
-        }
-        else {
-          this.tab.browser.messageManager.loadFrameScript("resource:///modules/marionette-listener.js", false);
-        }
-        prefs.setBoolPref("marionette.contentListener", true);
-      }
-    }
+    this.browser = new BrowserObj(this.getCurrentWindow());
+    this.browser.startSession();
+    this.browser.loadFrameScript("resource:///modules/marionette-listener.js");
+    this.tab = this.browser.tab;
     this.messageManager.sendAsyncMessage("Marionette:newSession", {B2G: isB2G});
   },
 
@@ -303,8 +280,23 @@ MarionetteDriverActor.prototype = {
   },
 
   goUrl: function MDA_goUrl(aRequest) {
-    this.messageManager.addMessageListener("DOMContentLoaded", this,true);
-    this.browser.selectedBrowser.loadURI(aRequest.value);
+    this.browser.loadURI(aRequest.value, this);
+  },
+
+  getUrl: function MDA_getUrl(aRequest) {
+    this.messageManager.sendAsyncMessage("Marionette:getUrl", {});
+  },
+
+  goBack: function MDA_goBack(aRequest) {
+    this.messageManager.sendAsyncMessage("Marionette:goBack", {});
+  },
+
+  goForward: function MDA_goForward(aRequest) {
+    this.messageManager.sendAsyncMessage("Marionette:goForward", {});
+  },
+
+  refresh: function MDA_refresh(aRequest) {
+    this.messageManager.sendAsyncMessage("Marionette:refresh", {});
   },
 
   setSearchTimeout: function MDA_setSearchTimeout(aRequest) {
@@ -320,16 +312,11 @@ MarionetteDriverActor.prototype = {
   },
 
   deleteSession: function MDA_deleteSession(aRequest) {
-    if (!isB2G && this.tab != null) {
-      if(this.browser.closeTab == undefined) {
-        this.browser.removeTab(this.tab);
-      }
-      else {
-        this.browser.closeTab(this.tab);
-      }
-      this.tab == null
-      //don't set this pref for B2G since the framescript can be safely reused
+    this.browser.closeTab();
+    this.tab = null;
+    if (!isB2G) {
       this.messageManager.sendAsyncMessage("Marionette:deleteSession", {});
+      //don't set this pref for B2G since the framescript can be safely reused
       prefs.setBoolPref("marionette.contentListener", false);
     }
     this.messageManager.removeMessageListener("Marionette:ok", this);
@@ -342,7 +329,7 @@ MarionetteDriverActor.prototype = {
   receiveMessage: function(message) {
     if (message.name == "DOMContentLoaded") {
       this.sendOk();
-      this.messageManager.removeMessageListener("DOMContentLoaded", this,true);
+      this.messageManager.removeMessageListener("DOMContentLoaded", this, true);
     }
     else if (message.name == "Marionette:done") {
       this.sendResponse(message.json.value);
@@ -354,7 +341,15 @@ MarionetteDriverActor.prototype = {
       this.sendError(message.json.message, message.json.status, message.json.stacktrace);
     }
     else if (message.name == "Marionette:log") {
-        MarionetteLogger.write(message.json.message);
+      MarionetteLogger.write(message.json.message);
+    }
+  },
+
+  /* for non-e10s eventListening */
+  handleEvent: function(evt) {
+    if (evt.type == "DOMContentLoaded") {
+      this.sendOk();
+      this.browser.removeEventListener("DOMContentLoaded", this, true);
     }
   },
 };
@@ -370,6 +365,89 @@ MarionetteDriverActor.prototype.requestTypes = {
   "findElement": MarionetteDriverActor.prototype.findElement,
   "clickElement": MarionetteDriverActor.prototype.clickElement,
   "goUrl": MarionetteDriverActor.prototype.goUrl,
+  "getUrl": MarionetteDriverActor.prototype.getUrl,
+  "goBack": MarionetteDriverActor.prototype.goBack,
+  "goForward": MarionetteDriverActor.prototype.goForward,
+  "refresh":  MarionetteDriverActor.prototype.refresh,
   "deleteSession": MarionetteDriverActor.prototype.deleteSession
 };
 
+function BrowserObj(win) {
+  this.DESKTOP = "desktop";
+  this.B2G = "B2G";
+  this.FENNEC = "fennec";
+  this.browser;
+  this.browser_mm;
+  this.tab = null;
+  this.messageManager = Cc["@mozilla.org/globalmessagemanager;1"].
+                             getService(Ci.nsIChromeFrameMessageManager);
+  if (win.gBrowser != undefined) {
+    this.type = this.DESKTOP; 
+    this.browser = win.gBrowser; 
+  }
+  else if (win.Browser != undefined) {
+    this.type = this.FENNEC;
+    this.browser = win.Browser; //BrowserApp for birch?
+  }
+  else {
+    this.type = this.B2G; //TODO: no browser support yet
+  }
+}
+
+BrowserObj.prototype = {
+  startSession: function BO_startSession() {
+    if (this.type == this.B2G) {
+      return;
+    }
+    this.addTab("about:blank");
+    if (this.type == this.DESKTOP) {
+      this.browser.selectedTab = this.tab;
+      var newTabBrowser = this.browser.getBrowserForTab(this.tab);
+      newTabBrowser.ownerDocument.defaultView.focus(); //focus the tab
+      this.browser_mm = this.browser.getBrowserForTab(this.tab).messageManager;
+    }
+    else {
+      this.browser_mm = this.tab.browser.messageManager;
+    }
+  },
+  closeTab: function BO_closeTab() {
+    if (this.tab != null) {
+      switch (this.type) {
+        case this.DESKTOP:
+          this.browser.removeTab(this.tab);
+          break;
+        case this.B2G:
+          //TODO
+          return;
+        default: 
+          this.browser.closeTab(this.tab);
+      }
+      this.tab = null;
+    }
+  },
+  addTab: function BO_addTab(uri) {
+    this.tab = this.browser.addTab(uri, true);
+  },
+  loadURI: function BO_openURI(uri, listener) {
+    if (this.type == this.DESKTOP) {
+      this.browser.addEventListener("DOMContentLoaded", listener, true);
+      this.browser.loadURI(uri);
+    }
+    else {
+      this.messageManager.addMessageListener("DOMContentLoaded", listener, true);
+      this.browser.selectedBrowser.loadURI(uri);
+    }
+  },
+  loadFrameScript: function BO_loadFrameScript(script) {
+    if (!prefs.getBoolPref("marionette.contentListener")) {
+      /* we only need one instance of each listener running in content space */
+      if (this.type == this.B2G) {
+        this.messageManager.loadFrameScript(script, false);
+      }
+      else {
+        this.browser_mm.loadFrameScript(script, false);
+      }
+      prefs.setBoolPref("marionette.contentListener", true);
+    }
+  },
+}

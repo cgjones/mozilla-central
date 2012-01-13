@@ -394,6 +394,10 @@ pref("layers.acceleration.force-enabled", true);
 pref("dom.screenEnabledProperty.enabled", true);
 pref("dom.screenBrightnessProperty.enabled", true);
 
+//Enable/disable marionette server, set listening port
+pref("marionette.server.enabled", true);
+pref("marionette.server.port", 2828);
+
 // Temporary permission hack for WebSMS
 pref("dom.sms.enabled", true);
 pref("dom.sms.whitelist", "file://,http://localhost:6666");

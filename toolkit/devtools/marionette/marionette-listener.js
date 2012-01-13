@@ -61,6 +61,7 @@ var elementStrategies = [CLASS_NAME, SELECTOR, ID, NAME, LINK_TEXT, PARTIAL_LINK
 var marionetteTimeout = null;
 var marionetteSearchTimeout = 0; //implicit timeout while searching for items
 var seenItems = {}; //holds the seen elements in content
+var timer = Components.classes["@mozilla.org/timer;1"].createInstance(Components.interfaces.nsITimer);
 
 addMessageListener("Marionette:newSession", newSession);
 addMessageListener("Marionette:executeScript", executeScript);
@@ -68,6 +69,10 @@ addMessageListener("Marionette:setScriptTimeout", setScriptTimeout);
 addMessageListener("Marionette:executeAsyncScript", executeAsyncScript);
 addMessageListener("Marionette:executeJSScript", executeJSScript);
 addMessageListener("Marionette:setSearchTimeout", setSearchTimeout);
+addMessageListener("Marionette:getUrl", getUrl);
+addMessageListener("Marionette:goBack", goBack);
+addMessageListener("Marionette:goForward", goForward);
+addMessageListener("Marionette:refresh", refresh);
 addMessageListener("Marionette:findElement", findElement);
 addMessageListener("Marionette:clickElement", clickElement);
 addMessageListener("Marionette:deleteSession", deleteSession);
@@ -75,7 +80,7 @@ addMessageListener("Marionette:deleteSession", deleteSession);
 function newSession(msg) {
   isB2G = msg.json.B2G;
   resetValues();
-  let session='mobile' + (isB2G ? '-b2g' : '');
+  let session='session' + (isB2G ? '-b2g' : '');
   sendResponse({value: session});
 }
 
@@ -83,8 +88,15 @@ function deleteSession(msg) {
   removeMessageListener("Marionette:newSession", newSession);
   removeMessageListener("Marionette:executeScript", executeScript);
   removeMessageListener("Marionette:setScriptTimeout", setScriptTimeout);
-  removeMessageListener("Marionette:executeJSScript", executeJSScript);
   removeMessageListener("Marionette:executeAsyncScript", executeAsyncScript);
+  removeMessageListener("Marionette:executeJSScript", executeJSScript);
+  removeMessageListener("Marionette:setSearchTimeout", setSearchTimeout);
+  removeMessageListener("Marionette:getUrl", getUrl);
+  removeMessageListener("Marionette:goBack", goBack);
+  removeMessageListener("Marionette:goForward", goForward);
+  removeMessageListener("Marionette:refresh", refresh);
+  removeMessageListener("Marionette:findElement", findElement);
+  removeMessageListener("Marionette:clickElement", clickElement);
   removeMessageListener("Marionette:deleteSession", deleteSession);
 }
 
@@ -330,6 +342,25 @@ function setSearchTimeout(msg) {
   }
 }
 
+function getUrl(msg) {
+  sendResponse({value: content.location.href});
+}
+
+function goBack(msg) {
+  content.history.back();
+  sendOk();
+}
+
+function goForward(msg) {
+  content.history.forward();
+  sendOk();
+}
+
+function refresh(msg) {
+  content.location.reload(true);
+  addEventListener("DOMContentLoaded", function() { removeEventListener("DOMContentLoaded", this, false); sendOk();}, false);
+}
+
 //Todo: extend to support findChildElement
 function findElement(msg) {
   var startTime = msg.json.time ? msg.json.time : new Date().getTime();
@@ -364,7 +395,7 @@ function findElement(msg) {
       sendError("Unable to locate element: " + msg.json.value, 7, null);
     } else {
       msg.json.time = startTime;
-      findElement(msg);
+      timer.initWithCallback(function() { findElement(msg) }, 100, Components.interfaces.nsITimer.TYPE_ONE_SHOT);
     }
   }
 }
