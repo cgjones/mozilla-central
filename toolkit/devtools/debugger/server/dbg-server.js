@@ -62,7 +62,7 @@ function dbg_assert(cond, e) {
   }
 }
 
-loadSubScript.call(this, "resource:///modules/dbg-transport.js");
+loadSubScript.call(this, "chrome://global/content/devtools/dbg-transport.js");
 
 // XPCOM constructors
 const ServerSocket = CC("@mozilla.org/network/server-socket;1",
@@ -88,7 +88,7 @@ var DebuggerServer = {
     Cu.import("resource://gre/modules/jsdebugger.jsm");
     this.xpcInspector = Cc["@mozilla.org/jsinspector;1"].getService(Ci.nsIJSInspector);
     this.initTransport();
-    this.addActors("resource:///modules/dbg-script-actors.js");
+    this.addActors("chrome://global/content/devtools/dbg-script-actors.js");
   },
 
   /**
@@ -124,7 +124,7 @@ var DebuggerServer = {
    * Install Firefox-specific actors.
    */
   addBrowserActors: function DH_addBrowserActors() {
-    this.addActors("resource:///modules/dbg-browser-actors.js");
+    this.addActors("chrome://global/content/devtools/dbg-browser-actors.js");
   },
 
   /**
@@ -349,46 +349,46 @@ DebuggerServerConnection.prototype = {
   _transport: null,
   get transport() { return this._transport },
 
-  send: function(aPacket) {
+  send: function DSC_send(aPacket) {
     this.transport.send(aPacket);
   },
 
-  allocID: function(aPrefix) {
-    return this.prefix + (aPrefix ? aPrefix : '') + this._nextID++;
+  allocID: function DSC_allocID(aPrefix) {
+    return this.prefix + (aPrefix || '') + this._nextID++;
   },
 
   /**
    * Add a map of actor IDs to the connection.
    */
-  addActorPool: function(aActorPool) {
+  addActorPool: function DSC_addActorPool(aActorPool) {
     this._extraPools.push(aActorPool);
   },
 
   /**
    * Remove a previously-added pool of actors to the connection.
    */
-  removeActorPool: function(aActorPool) {
+  removeActorPool: function DSC_removeActorPool(aActorPool) {
     let index = this._extraPools.splice(this._extraPools.lastIndexOf(aActorPool), 1);
   },
 
   /**
    * Add an actor to the default actor pool for this connection.
    */
-  addActor: function(aActor) {
+  addActor: function DSC_addActor(aActor) {
     this._actorPool.addActor(aActor);
   },
 
   /**
    * Remove an actor to the default actor pool for this connection.
    */
-  removeActor: function(aActor) {
+  removeActor: function DSC_removeActor(aActor) {
     this._actorPool.removeActor(aActor);
   },
 
   /**
    * Add a cleanup to the default actor pool for this connection.
    */
-  addCleanup: function(aCleanup) {
+  addCleanup: function DSC_addCleanup(aCleanup) {
     this._actorPool.addCleanup(aCleanup);
   },
 
@@ -419,7 +419,7 @@ DebuggerServerConnection.prototype = {
 
   // Transport hooks.
 
-  onPacket: function(aPacket) {
+  onPacket: function DSC_onPacket(aPacket) {
     let actor = this.getActor(aPacket.to);
     if (!actor) {
       this.transport.send({ from: aPacket.to ? aPacket.to : "root",
@@ -456,7 +456,7 @@ DebuggerServerConnection.prototype = {
     this.transport.send(ret);
   },
 
-  onClosed: function() {
+  onClosed: function DSC_onClosed() {
     dumpn("Cleaning up connection.");
 
     this._actorPool.cleanup();

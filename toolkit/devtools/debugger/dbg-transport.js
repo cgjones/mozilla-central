@@ -38,8 +38,22 @@
  * ***** END LICENSE BLOCK ***** */
 
 "use strict";
-Cu.import("resource://gre/modules/NetUtil.jsm", this);
+Cu.import("resource://gre/modules/NetUtil.jsm");
 
+/**
+ * An adapter that handles data transfers between the debugger client and
+ * server. It can work with both nsIPipe and nsIServerSocket transports so
+ * long as the properly created input and output streams are specified. Data is
+ * transferred as a JSON packet serialized into a string, with the string length
+ * prepended to the packet, followed by a colon ([length]:[packet]). The
+ * contents of the JSON packet are specified in the Remote Debugging Protocol
+ * specification.
+ *
+ * @param aInput nsIInputStream
+ *        The input stream.
+ * @param aOutput nsIOutputStream
+ *        The output stream.
+ */
 function DebuggerTransport(aInput, aOutput)
 {
   this._input = aInput;
@@ -53,33 +67,45 @@ DebuggerTransport.prototype = {
   get hooks() { return this._hooks; },
   set hooks(aHooks) { this._hooks = aHooks; },
 
-  send: function DS_send(aPacket) {
-    // TODO: remove pretty printing when the protocol is done.
+  /**
+   * Transmit the specified packet.
+   */
+  send: function DT_send(aPacket) {
+    // TODO (bug 709088): remove pretty printing when the protocol is done.
     let data = JSON.stringify(aPacket, null, 2);
     data = data.length + ':' + data;
     this._outgoing += data;
     this._flushOutgoing();
   },
 
-  close: function DS_close() {
+  /**
+   * Close the transport.
+   */
+  close: function DT_close() {
     this._input.close();
     this._output.close();
   },
 
-  _flushOutgoing: function DS_flushOutgoing() {
+  /**
+   * Flush the outgoing stream.
+   */
+  _flushOutgoing: function DT_flushOutgoing() {
     if (this._outgoing.length > 0) {
       var threadManager = Cc["@mozilla.org/thread-manager;1"].getService();
       this._output.asyncWait(this, 0, 0, threadManager.currentThread);
     }
   },
 
-  onOutputStreamReady: function DS_ready(aStream) {
+  onOutputStreamReady: function DT_ready(aStream) {
     let written = aStream.write(this._outgoing, this._outgoing.length);
     this._outgoing = this._outgoing.slice(written);
     this._flushOutgoing();
   },
 
-  ready: function DS_ready() {
+  /**
+   * Initialize the input stream for reading.
+   */
+  ready: function DT_ready() {
     let pump = Cc["@mozilla.org/network/input-stream-pump;1"]
       .createInstance(Ci.nsIInputStreamPump);
     pump.init(this._input, -1, -1, 0, 0, false);
@@ -87,14 +113,14 @@ DebuggerTransport.prototype = {
   },
 
   // nsIStreamListener
-  onStartRequest: function DS_onStartRequest(aRequest, aContext) {},
+  onStartRequest: function DT_onStartRequest(aRequest, aContext) {},
 
-  onStopRequest: function DS_onStopRequest(aRequest, aContext, aStatus) {
+  onStopRequest: function DT_onStopRequest(aRequest, aContext, aStatus) {
     this.close();
     this.hooks.onClosed(aStatus);
   },
 
-  onDataAvailable: function DS_onDataAvailable(aRequest, aContext,
+  onDataAvailable: function DT_onDataAvailable(aRequest, aContext,
                                                 aStream, aOffset, aCount) {
     try {
       this._incoming += NetUtil.readInputStreamToString(aStream,
@@ -107,7 +133,14 @@ DebuggerTransport.prototype = {
     }
   },
 
-  processIncoming: function DS_processIncoming() {
+  /**
+   * Process incomig packets. Returns true if a packet has been received, either
+   * if it was properly parsed or not. Returns false if the incoming stream does
+   * not contain a full packet yet. After a proper packet is parsed, the dispatch
+   * handler DebuggerTransport.hooks.onPacket is called with the packet as a
+   * parameter.
+   */
+  processIncoming: function DT_processIncoming() {
     // Well this is ugly.
     let sep = this._incoming.indexOf(':');
     if (sep < 0) {

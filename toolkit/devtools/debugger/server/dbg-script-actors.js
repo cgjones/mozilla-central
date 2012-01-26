@@ -983,6 +983,12 @@ EnvironmentActor.prototype = {
   actorPrefix: "environment",
 
   grip: function EA_grip() {
+    // Debugger.Frame might be dead by the time we get here, which will cause
+    // accessing its properties to throw.
+    if (!this.obj.live) {
+      return undefined;
+    }
+
     let parent;
     if (this.obj.environment.parent) {
       parent = this.threadActor.environmentActor(this.obj.environment.parent, this.registeredPool);
@@ -1014,6 +1020,12 @@ EnvironmentActor.prototype = {
    */
   _bindings: function EA_bindings() {
     let bindings = { mutable: {}, immutable: {} };
+
+    // TODO: this will be redundant after bug 692984 is fixed.
+    if (typeof this.obj.environment.getVariableDescriptor != "function") {
+      return bindings;
+    }
+
     for (let name in this.obj.environment.names()) {
       let desc = this.obj.environment.getVariableDescriptor(name);
       // XXX: the spec doesn't say what to do with accessor properties.

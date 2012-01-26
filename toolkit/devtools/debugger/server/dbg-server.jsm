@@ -57,7 +57,7 @@ function loadSubScript(aURL)
   }
 }
 
-Cu.import("resource:///modules/dbg-client.jsm");
+Cu.import("resource:///modules/devtools/dbg-client.jsm");
 
 // Load the debugging server in a sandbox with its own compartment.
 var systemPrincipal = Cc["@mozilla.org/systemprincipal;1"]
@@ -65,6 +65,6 @@ var systemPrincipal = Cc["@mozilla.org/systemprincipal;1"]
 
 var gGlobal = Cu.Sandbox(systemPrincipal);
 gGlobal.importFunction(loadSubScript);
-gGlobal.loadSubScript("resource:///modules/dbg-server.js");
+gGlobal.loadSubScript("chrome://global/content/devtools/dbg-server.js");
 
 var DebuggerServer = gGlobal.DebuggerServer;

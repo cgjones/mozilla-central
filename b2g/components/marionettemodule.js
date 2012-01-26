@@ -44,7 +44,7 @@ MarionetteModule.prototype = {
       try {
         let port = Services.prefs.getIntPref('marionette.server.port');
         if (Services.prefs.getBoolPref('marionette.server.enabled')) {
-          Cu.import('resource:///modules/dbg-server.jsm');
+          Cu.import('resource:///modules/devtools/dbg-server.jsm');
           DebuggerServer.addActors('resource:///modules/marionette-actors.js');
           DebuggerServer.initTransport();
           DebuggerServer.openListener(port, true);

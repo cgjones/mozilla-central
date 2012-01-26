@@ -44,6 +44,8 @@
 var Ci = Components.interfaces;
 var Cc = Components.classes;
 var Cu = Components.utils;
+var uuidGen = Components.classes["@mozilla.org/uuid-generator;1"]
+             .getService(Components.interfaces.nsIUUIDGenerator);
 
 var loader = Cc["@mozilla.org/moz/jssubscript-loader;1"]
              .getService(Ci.mozIJSSubScriptLoader);
@@ -114,11 +116,15 @@ function MarionetteDriverActor(aConnection)
   this.messageManager.addMessageListener("Marionette:done", this);
   this.messageManager.addMessageListener("Marionette:error", this);
   this.messageManager.addMessageListener("Marionette:log", this);
+  this.messageManager.addMessageListener("Marionette:register", this);
+  this.messageManager.addMessageListener("Marionette:goUrl", this);
   this.windowMediator = Cc['@mozilla.org/appshell/window-mediator;1'].getService(Ci.nsIWindowMediator);
+  this.currentChromeWindow = null; //TODO ADD chrome window support
   this.browser = null;
   this.tab = null;
   this.context = "content";
   this.scriptTimeout = null;
+  this.seenItems = {};
   this.timer = null;
 }
 
@@ -126,7 +132,13 @@ MarionetteDriverActor.prototype = {
 
   actorPrefix: "marionette",
 
+  sendAsync: function (name, values) {
+    this.messageManager.sendAsyncMessage("Marionette:" + name + this.browser.curFrameId, values);
+  },
+
   sendResponse: function (value) {
+    if (typeof(value) == 'undefined')
+        value = null;
     this.conn.send({from:this.actorID, value: value});
   },
 
@@ -150,11 +162,21 @@ MarionetteDriverActor.prototype = {
   //We will only ever be running one browser at a time
   //If no browser is running (ie: in B2G) start one up
   newSession: function MDA_newSession(aRequest) {
-    this.browser = new BrowserObj(this.getCurrentWindow());
-    this.browser.startSession();
-    this.browser.loadFrameScript("resource:///modules/marionette-listener.js");
-    this.tab = this.browser.tab;
-    this.messageManager.sendAsyncMessage("Marionette:newSession", {B2G: isB2G});
+    //TODO: check if session exists before creating it
+    if (!prefs.getBoolPref("marionette.contentListener")) {
+      this.browser = new BrowserObj(this.getCurrentWindow());
+      this.browser.startSession();
+      this.browser.loadFrameScript("resource:///modules/marionette-listener.js", this.getCurrentWindow());
+      this.tab = this.browser.tab;
+    }
+    else if (isB2G && (this.browser == null)) {
+      this.browser = new BrowserObj(this.getCurrentWindow());
+      this.browser.startSession();
+      this.messageManager.sendAsyncMessage("Marionette:restart", {});
+    }
+    else {
+      this.sendError("Session already running", 17, null);
+    }
   },
 
   setContext: function MDA_setContext(aRequest) {
@@ -182,7 +204,7 @@ MarionetteDriverActor.prototype = {
         _chromeSandbox.Marionette = Marionette;
         if (directInject) {
           //run the given script directly
-          var res = Cu.evalInSandbox(aRequest.value, _chromeSandbox);
+          var res = Cu.evalInSandbox(aRequest.value, _chromeSandbox, "1.8");
           if (res == undefined || res.passed == undefined) {
             this.sendError("Marionette.finish() not called", 17, null);
           }
@@ -193,7 +215,7 @@ MarionetteDriverActor.prototype = {
         else {
           _chromeSandbox.__marionetteParams = params;
           var script = "var func = function() {" + aRequest.value + "}; func.apply(null, __marionetteParams);";
-          var res = Cu.evalInSandbox(script, _chromeSandbox);
+          var res = Cu.evalInSandbox(script, _chromeSandbox, "1.8");
           this.sendResponse(res);
         }
       }
@@ -204,7 +226,7 @@ MarionetteDriverActor.prototype = {
       Marionette.reset();
     }
     else {
-      this.messageManager.sendAsyncMessage("Marionette:executeScript", {value: aRequest.value, args: aRequest.args});
+      this.sendAsync("executeScript", {value: aRequest.value, args: aRequest.args});
     }
   },
 
@@ -215,7 +237,7 @@ MarionetteDriverActor.prototype = {
     }
     else {
       this.scriptTimeout = timeout;
-      this.messageManager.sendAsyncMessage("Marionette:setScriptTimeout", {value: timeout});
+      this.sendAsync("setScriptTimeout", {value: timeout});
       this.sendOk();
     }
   },
@@ -235,7 +257,7 @@ MarionetteDriverActor.prototype = {
       }
     }
     else {
-      this.messageManager.sendAsyncMessage("Marionette:executeJSScript", {value:aRequest.value, args:aRequest.args, timeout:aRequest.timeout});
+      this.sendAsync("executeJSScript", {value:aRequest.value, args:aRequest.args, timeout:aRequest.timeout});
    }
   },
 
@@ -255,6 +277,10 @@ MarionetteDriverActor.prototype = {
            { sandboxPrototype: curWindow, wantXrays: false, sandboxName: ''});
         _chromeSandbox.__marionetteParams = params;
         _chromeSandbox.Marionette = Marionette;
+        _chromeSandbox.is = Marionette.is;
+        _chromeSandbox.isnot = Marionette.isnot;
+        _chromeSandbox.ok = Marionette.ok;
+        _chromeSandbox.finish = Marionette.finish;
         var script;
         var timeoutScript = 'var timeoutFunc = function() {Marionette.returnFunc("timed out", 28);};'
                            + 'if(Marionette.__timer != null) {Marionette.__timer.initWithCallback(timeoutFunc, '+ this.scriptTimeout +', Components.interfaces.nsITimer.TYPE_ONE_SHOT);}';
@@ -269,61 +295,113 @@ MarionetteDriverActor.prototype = {
                   + '__marionetteFunc.apply(null, __marionetteParams);'
                   + timeoutScript;
         }
-        Cu.evalInSandbox(script, _chromeSandbox);
+        Cu.evalInSandbox(script, _chromeSandbox, "1.8");
       } catch (e) {
         this.sendError(e.name + ": " + e.message, 17, e.stack);
       }
     }
     else {
-      this.messageManager.sendAsyncMessage("Marionette:executeAsyncScript", {value: aRequest.value, args: aRequest.args});
+      this.sendAsync("executeAsyncScript", {value: aRequest.value, args: aRequest.args});
     }
   },
 
   goUrl: function MDA_goUrl(aRequest) {
-    this.browser.loadURI(aRequest.value, this);
+    this.sendAsync("goUrl", aRequest);
   },
 
   getUrl: function MDA_getUrl(aRequest) {
-    this.messageManager.sendAsyncMessage("Marionette:getUrl", {});
+    this.sendAsync("getUrl", {});
   },
 
   goBack: function MDA_goBack(aRequest) {
-    this.messageManager.sendAsyncMessage("Marionette:goBack", {});
+    this.sendAsync("goBack", {});
   },
 
   goForward: function MDA_goForward(aRequest) {
-    this.messageManager.sendAsyncMessage("Marionette:goForward", {});
+    this.sendAsync("goForward", {});
   },
 
   refresh: function MDA_refresh(aRequest) {
-    this.messageManager.sendAsyncMessage("Marionette:refresh", {});
+    this.sendAsync("refresh", {});
+  },
+
+  getWindow: function MDA_getWindow(aRequest) {
+    var curWin = this.getCurrentWindow();
+    var winId = curWin.QueryInterface(Components.interfaces.nsIInterfaceRequestor).getInterface(Components.interfaces.nsIDOMWindowUtils).outerWindowID;
+    var winId = winId + (isB2G ? '-b2g' : '');
+    if (this.seenItems[winId] == undefined) {
+      this.seenItems[winId] = curWin;
+    }
+    this.sendResponse(winId);
+  },
+
+  getWindows: function MDA_getWindows(aRequest) {
+    if (this.context == "chrome") {
+      this.sendError("not yet supported", 17, null);
+    }
+    else {
+      var res = [];
+      var winEn = this.windowMediator.getEnumerator("navigator:browser"); 
+      while(winEn.hasMoreElements()) {
+        var foundWin = winEn.getNext();
+        var winId = foundWin.QueryInterface(Components.interfaces.nsIInterfaceRequestor).getInterface(Components.interfaces.nsIDOMWindowUtils).outerWindowID;
+        var winId = winId + (isB2G ? '-b2g' : '');
+        if (this.seenItems[winId] == undefined) {
+          this.seenItems[winId] = foundWin;
+        }
+        res.push(winId)
+      }
+      this.sendResponse(res);
+    }
+  },
+
+  switchToWindow: function MDA_switchToWindow(aRequest) {
+  },
+
+  switchToFrame: function MDA_switchToFrame(aRequest) {
+    this.sendAsync("switchToFrame", aRequest);
   },
 
   setSearchTimeout: function MDA_setSearchTimeout(aRequest) {
-    this.messageManager.sendAsyncMessage("Marionette:setSearchTimeout", {value: aRequest.value});
+    this.sendAsync("setSearchTimeout", {value: aRequest.value});
   },
 
   findElement: function MDA_findElement(aRequest) {
-    this.messageManager.sendAsyncMessage("Marionette:findElement", {value: aRequest.value, using: aRequest.using, element: aRequest.element});
+    this.sendAsync("findElement", {value: aRequest.value, using: aRequest.using, element: aRequest.element});
   },
 
   clickElement: function MDA_clickElement(aRequest) {
-    this.messageManager.sendAsyncMessage("Marionette:clickElement", {element: aRequest.element});
+    this.sendAsync("clickElement", {element: aRequest.element});
   },
 
   deleteSession: function MDA_deleteSession(aRequest) {
-    this.browser.closeTab();
-    this.tab = null;
-    if (!isB2G) {
-      this.messageManager.sendAsyncMessage("Marionette:deleteSession", {});
+    if (this.browser != null) {
+      this.tab = null;
+      if (isB2G) {
+        this.messageManager.sendAsyncMessage("Marionette:sleepSession" + this.browser.mainContentId, {});
+        this.browser.knownFrames.splice(this.browser.knownFrames.indexOf(this.browser.mainContentId), 1);
+      }
+      else {
+        prefs.setBoolPref("marionette.contentListener", false);
+      }
+      this.browser.closeTab();
+      for (var i in this.browser.knownFrames) {
+        this.messageManager.sendAsyncMessage("Marionette:deleteSession" + this.browser.knownFrames[i], {});
+      }
       //don't set this pref for B2G since the framescript can be safely reused
-      prefs.setBoolPref("marionette.contentListener", false);
+      var winEnum = this.browser.getWinEnumerator();
+      while (winEnum.hasMoreElements()) {
+        winEnum.getNext().messageManager.removeDelayedFrameScript("resource:///modules/marionette-listener.js"); 
+      }
     }
+    this.sendOk();
     this.messageManager.removeMessageListener("Marionette:ok", this);
     this.messageManager.removeMessageListener("Marionette:done", this);
     this.messageManager.removeMessageListener("Marionette:error", this);
     this.messageManager.removeMessageListener("Marionette:log", this);
-    this.sendOk();
+    this.messageManager.removeMessageListener("Marionette:register", this);
+    this.messageManager.removeMessageListener("Marionette:goUrl", this);
+    this.browser = null;
   },
 
   receiveMessage: function(message) {
@@ -343,13 +421,28 @@ MarionetteDriverActor.prototype = {
     else if (message.name == "Marionette:log") {
       MarionetteLogger.write(message.json.message);
     }
+    else if (message.name == "Marionette:register") {
+      var nullPrevious= (this.browser.curFrameId == null);
+      var curWin = this.getCurrentWindow();
+      var frameObject = curWin.QueryInterface(Components.interfaces.nsIInterfaceRequestor).getInterface(Components.interfaces.nsIDOMWindowUtils).getOuterWindowWithId(message.json.value);
+      var reg = this.browser.register(message.json.value, message.json.href);
+      if (reg) {
+        this.seenItems[reg] = frameObject; //add to seenItems
+        if (nullPrevious && (this.browser.curFrameId != null)) {
+          this.sendAsync("newSession", {B2G: isB2G});
+        }
+      }
+      return reg;
+    }
+    else if (message.name == "Marionette:goUrl") {
+      this.browser.loadURI(message.json.value, this);
+    }
   },
-
   /* for non-e10s eventListening */
   handleEvent: function(evt) {
     if (evt.type == "DOMContentLoaded") {
       this.sendOk();
-      this.browser.removeEventListener("DOMContentLoaded", this, true);
+      this.browser.browser.removeEventListener("DOMContentLoaded", this, false);
     }
   },
 };
@@ -369,6 +462,10 @@ MarionetteDriverActor.prototype.requestTypes = {
   "goBack": MarionetteDriverActor.prototype.goBack,
   "goForward": MarionetteDriverActor.prototype.goForward,
   "refresh":  MarionetteDriverActor.prototype.refresh,
+  "getWindow":  MarionetteDriverActor.prototype.getWindow,
+  "getWindows":  MarionetteDriverActor.prototype.getWindows,
+  "switchToFrame": MarionetteDriverActor.prototype.switchToFrame,
+  "switchToWindow": MarionetteDriverActor.prototype.switchToWindow,
   "deleteSession": MarionetteDriverActor.prototype.deleteSession
 };
 
@@ -379,6 +476,10 @@ function BrowserObj(win) {
   this.browser;
   this.browser_mm;
   this.tab = null;
+  this.knownFrames = [];
+  this.curFrameId = null;
+  this.startPage = "about:blank";
+  this.mainContentId = null; // used in B2G to identify the homescreen content page
   this.messageManager = Cc["@mozilla.org/globalmessagemanager;1"].
                              getService(Ci.nsIChromeFrameMessageManager);
   if (win.gBrowser != undefined) {
@@ -391,6 +492,7 @@ function BrowserObj(win) {
   }
   else {
     this.type = this.B2G; //TODO: no browser support yet
+    this.startPage = "homescreen/homescreen.html";
   }
 }
 
@@ -399,7 +501,7 @@ BrowserObj.prototype = {
     if (this.type == this.B2G) {
       return;
     }
-    this.addTab("about:blank");
+    this.addTab(this.startPage);
     if (this.type == this.DESKTOP) {
       this.browser.selectedTab = this.tab;
       var newTabBrowser = this.browser.getBrowserForTab(this.tab);
@@ -430,7 +532,7 @@ BrowserObj.prototype = {
   },
   loadURI: function BO_openURI(uri, listener) {
     if (this.type == this.DESKTOP) {
-      this.browser.addEventListener("DOMContentLoaded", listener, true);
+      this.browser.addEventListener("DOMContentLoaded", listener, false);
       this.browser.loadURI(uri);
     }
     else {
@@ -438,16 +540,28 @@ BrowserObj.prototype = {
       this.browser.selectedBrowser.loadURI(uri);
     }
   },
-  loadFrameScript: function BO_loadFrameScript(script) {
+  loadFrameScript: function BO_loadFrameScript(script, frame) {
     if (!prefs.getBoolPref("marionette.contentListener")) {
-      /* we only need one instance of each listener running in content space */
-      if (this.type == this.B2G) {
-        this.messageManager.loadFrameScript(script, false);
-      }
-      else {
-        this.browser_mm.loadFrameScript(script, false);
-      }
+      frame.window.messageManager.loadFrameScript(script, true);
       prefs.setBoolPref("marionette.contentListener", true);
     }
+  },
+  register: function BO_register(id, href) {
+    var uid = id + (this.type == this.B2G ? '-b2g' : '');
+    if (this.curFrameId == null) {
+      if (href.indexOf(this.startPage) > -1) {
+        this.curFrameId = uid;
+        this.mainContentId = uid;
+      }
+    }
+    this.knownFrames.push(uid); //used to deletesessions
+    return uid;
+  },
+  getWinEnumerator: function BO_winEnum() {
+    var winType = 'navigator:browser';
+    if (this.type == this.B2G) {
+      winType = null;
+    }
+    return Cc['@mozilla.org/appshell/window-mediator;1'].getService(Ci.nsIWindowMediator).getEnumerator(winType);
   },
 }

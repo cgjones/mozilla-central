@@ -13,7 +13,7 @@
  * for the specific language governing rights and limitations under the
  * License.
  *
- * The Original Code is mozilla.org code.
+ * The Original Code is JS Debugger Server code.
  *
  * The Initial Developer of the Original Code is
  *   Mozilla Foundation
@@ -50,6 +50,12 @@ function createRootActor(aConnection)
   return new BrowserRootActor(aConnection);
 }
 
+/**
+ * Creates the root actor that client-server communications always start with.
+ * The root actor is responsible for the initial 'hello' packet and for
+ * responding to a 'listTabs' request that produces the list of currently open
+ * tabs.
+ */
 function BrowserRootActor(aConnection)
 {
   this.conn = aConnection;
@@ -62,12 +68,18 @@ function BrowserRootActor(aConnection)
 }
 
 BrowserRootActor.prototype = {
+  /**
+   * Return a 'hello' packet as specified by the Remote Debugging Protocol.
+   */
   sayHello: function BRA_sayHello() {
     return { from: "root",
              applicationType: "browser",
              traits: [] };
   },
 
+  /**
+   * Disconnects the actor from the browser window.
+   */
   disconnect: function BRA_disconnect() {
     windowMediator.removeListener(this);
 
@@ -183,10 +195,17 @@ BrowserRootActor.prototype = {
   },
 }
 
+/**
+ * The request types this actor can handle.
+ */
 BrowserRootActor.prototype.requestTypes = {
   "listTabs": BrowserRootActor.prototype.onListTabs
 };
 
+/**
+ * Creates a tab actor for handling requests to a browser tab, like attaching
+ * and detaching.
+ */
 function BrowserTabActor(aConnection, aBrowser)
 {
   this.conn = aConnection;
@@ -195,8 +214,8 @@ function BrowserTabActor(aConnection, aBrowser)
   this.onWindowCreated = this.onWindowCreated.bind(this);
 }
 
-// XXX: BrowserTabActor attach/detach/exit/disconnect is a *complete*
-// mess, needs to be rethought asap.
+// XXX (bug 710213): BrowserTabActor attach/detach/exit/disconnect is a
+// *complete* mess, needs to be rethought asap.
 
 BrowserTabActor.prototype = {
   get browser() { return this._browser; },
@@ -246,6 +265,9 @@ BrowserTabActor.prototype = {
     this._browser = null;
   },
 
+  /**
+   * Does the actual work of attching to a tab.
+   */
   _attach: function BTA_attach() {
     if (this._attached) {
       return;
@@ -265,6 +287,10 @@ BrowserTabActor.prototype = {
     this._attached = true;
   },
 
+  /**
+   * Creates a thread actor and a pool for context-lifetime actors. It then sets
+   * up the content window for debugging.
+   */
   _pushContext: function BTA_pushContext() {
     dbg_assert(!this._contextPool, "Can't push multiple contexts");
 
@@ -276,6 +302,10 @@ BrowserTabActor.prototype = {
     this._contextPool.addActor(this.threadActor);
   },
 
+  /**
+   * Exits the current thread actor and removes the context-lifetime actor pool.
+   * The content window is no longer being debugged after this call.
+   */
   _popContext: function BTA_popContext() {
     dbg_assert(!!this._contextPool, "No context to pop.");
 
@@ -285,6 +315,9 @@ BrowserTabActor.prototype = {
     this.threadActor = null;
   },
 
+  /**
+   * Does the actual work of detaching from a tab.
+   */
   _detach: function BTA_detach() {
     if (!this.attached) {
       return;
@@ -301,7 +334,7 @@ BrowserTabActor.prototype = {
     this._attached = false;
   },
 
-  // Request Handlers
+  // Protocol Request Handlers
 
   onAttach: function BTA_onAttach(aRequest) {
     if (this.exited) {
@@ -345,6 +378,10 @@ BrowserTabActor.prototype = {
       .suppressEventHandling(false);
   },
 
+  /**
+   * Handle location changes, by sending a tabNavigated notification to the
+   * client.
+   */
   onWindowCreated: function BTA_onWindowCreated(evt) {
     if (evt.target === this.browser.contentDocument) {
       if (this._attached) {
@@ -356,11 +393,18 @@ BrowserTabActor.prototype = {
 
 };
 
+/**
+ * The request types this actor can handle.
+ */
 BrowserTabActor.prototype.requestTypes = {
   "attach": BrowserTabActor.prototype.onAttach,
   "detach": BrowserTabActor.prototype.onDetach
 };
 
+/**
+ * Registers handlers for new request types defined dynamically. This is used
+ * for example by add-ons to augment the functionality of the tab actor.
+ */
 DebuggerServer.addTabRequest = function DS_addTabRequest(aName, aFunction) {
   BrowserTabActor.prototype.requestTypes[aName] = function(aRequest) {
     if (!this.attached) {
