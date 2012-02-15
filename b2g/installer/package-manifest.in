@@ -601,7 +601,8 @@ bin/components/@DLL_PREFIX@nkgnomevfs@DLL_SUFFIX@
 @BINPATH@/chrome/icons/
 @BINPATH@/chrome/chrome@JAREXT@
 @BINPATH@/chrome/chrome.manifest
-@BINPATH@/components/marionettemodule.js
 @BINPATH@/components/B2GComponents.manifest
+@BINPATH@/components/MarionetteComponents.manifest
+@BINPATH@/components/marionettemodule.js
 @BINPATH@/components/B2GComponents.xpt
 @BINPATH@/components/CameraContent.js

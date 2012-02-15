@@ -1,42 +1,7 @@
 /* -*- Mode: javascript; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* vim: set ft=javascript ts=2 et sw=2 tw=80: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- *   Mozilla Foundation
- * Portions created by the Initial Developer are Copyright (C) 2011
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *    Malini Das (mdas@mozilla.com)
- *    Jonathan Griffin (jgriffin@mozilla.com)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this file,
+ * You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 var Cu = Components.utils;
 var uuidGen = Components.classes["@mozilla.org/uuid-generator;1"]
@@ -45,6 +10,8 @@ var uuidGen = Components.classes["@mozilla.org/uuid-generator;1"]
 var loader = Components.classes["@mozilla.org/moz/jssubscript-loader;1"]
              .getService(Components.interfaces.mozIJSSubScriptLoader);
 loader.loadSubScript("resource:///modules/marionette-simpletest.js");
+loader.loadSubScript("resource:///modules/marionette-log-obj.js");
+var marionetteLogObj = new MarionetteLogObj();
 
 var isB2G = false;
 
@@ -67,6 +34,11 @@ var listenerId = null; //unique ID of this listener
 var activeFrame = null;
 var win = content;
 
+/**
+ * Called when listener is first started up. 
+ * The listener sends its unique window ID and its current URI to the actor.
+ * If the actor returns an ID, we start the listeners. Otherwise, nothing happens.
+ */
 function registerSelf() {
   var register = sendSyncMessage("Marionette:register", {value: winUtil.outerWindowID, href: content.location.href});
   
@@ -76,6 +48,9 @@ function registerSelf() {
   }
 }
 
+/**
+ * Start all message listeners
+ */
 function startListeners() {
   addMessageListener("Marionette:newSession" + listenerId, newSession);
   addMessageListener("Marionette:executeScript" + listenerId, executeScript);
@@ -94,23 +69,37 @@ function startListeners() {
   addMessageListener("Marionette:deleteSession" + listenerId, deleteSession);
   addMessageListener("Marionette:sleepSession" + listenerId, sleepSession);
 }
- 
+
+/**
+ * Called when we start a new session. It registers the
+ * current environment, and resets all values
+ */
 function newSession(msg) {
   isB2G = msg.json.B2G;
   resetValues();
-  sendResponse({value: listenerId});
 }
-
+ 
+/**
+ * Puts the current session to sleep, so all listeners are removed except
+ * for the 'restart' listener. This is used to keep the content listener
+ * alive for reuse in B2G instead of reloading it each time.
+ */
 function sleepSession(msg) {
   deleteSession();
   addMessageListener("Marionette:restart", restart);
 }
 
+/**
+ * Restarts all our listeners after this listener was put to sleep
+ */
 function restart() {
   removeMessageListener("Marionette:restart", restart);
   registerSelf();
 }
 
+/**
+ * Removes all listeners
+ */
 function deleteSession(msg) {
   removeMessageListener("Marionette:newSession" + listenerId, newSession);
   removeMessageListener("Marionette:executeScript" + listenerId, executeScript);
@@ -132,24 +121,40 @@ function deleteSession(msg) {
 
 /*
  * Helper methods 
- */ 
+ */
+
+/**
+ * Send response back to server
+ */
 function sendResponse(value) {
   sendAsyncMessage("Marionette:done", value);
 }
 
+/**
+ * Send ack back to server
+ */
 function sendOk() {
   sendAsyncMessage("Marionette:ok", {});
 }
 
+/**
+ * Send log message to server
+ */
 function sendLog(msg) {
   sendAsyncMessage("Marionette:log", { message: msg });
 }
 
+/**
+ * Send error message to server
+ */
 function sendError(message, status, trace) {
   var error_msg = { message: message, status: status, stacktrace: trace };
   sendAsyncMessage("Marionette:error", error_msg);
 }
 
+/**
+ * Clear test values after completion of test
+ */
 function resetValues() {
   marionetteTimeout = null;
   Marionette.tests = [];
@@ -159,6 +164,9 @@ function resetValues() {
  * Web Element Helpers
  */
 
+/**
+ * Add element to list of seen elements
+ */
 function addToKnownElements(element) {
   for (var i in seenItems) {
     if (seenItems[i] == element) {
@@ -170,6 +178,9 @@ function addToKnownElements(element) {
   return id;
 }
 
+/**
+ * Check if the element is still in the document
+ */
 function inDocument(element) { 
   while (element) {
       if (element == win.document) {
@@ -180,6 +191,9 @@ function inDocument(element) {
   return false;
 }
 
+/**
+ * Retrieve element from its unique ID
+ */
 function getKnownElement(id) {
   var el = seenItems[id];
   if (!el) {
@@ -193,7 +207,8 @@ function getKnownElement(id) {
   return el;
 }
 
-/* Convert values to primitives that can be transported over the Marionette
+/**
+ * Convert values to primitives that can be transported over the Marionette
  * JSON protocol.
  */
 function wrapValue(val) {
@@ -237,7 +252,9 @@ function wrapValue(val) {
   return result;
 }
 
-/* convert any ELEMENT references in 'args' to the actual elements */
+/**
+ * Convert any ELEMENT references in 'args' to the actual elements
+ */
 function convertWrappedArguments(args) {
   var converted;
   switch (typeof(args)) {
@@ -277,7 +294,9 @@ function convertWrappedArguments(args) {
  * Execute* helpers
  */
 
-/* Apply any namedArgs to the Marionette object */
+/**
+ * Apply any namedArgs to the Marionette object
+ */
 function applyNamedArgs(args) {
   Marionette.namedArgs = {};
   args.forEach(function(arg) {
@@ -289,12 +308,16 @@ function applyNamedArgs(args) {
   });
 }
 
-/* send error when we detect an unload event during async scripts */
+/**
+ * send error when we detect an unload event during async scripts
+ */
 function errUnload() {
   sendError("unload was called", 17, null);
 }
 
-/* upon completion or error from the async script, send response to marionette-responder */
+/**
+ * Upon completion or error from the async script, send response to marionette-responder
+ */
 function asyncResponse() {
   win.removeEventListener("unload", errUnload, false);
   win.document.removeEventListener("marionette-async-response", asyncResponse, false);
@@ -306,6 +329,8 @@ function asyncResponse() {
   }
 
   var res = win.document.getUserData('__marionetteRes');
+  sendSyncMessage("Marionette:testLog", {value: wrapValue(marionetteLogObj.getLogs())});
+  marionetteLogObj.clearLogs();
   if (res.status == 0){
     sendResponse({value: wrapValue(res.value), status: res.status});
   }
@@ -319,7 +344,10 @@ function asyncResponse() {
  * Marionette Methods
  */
 
-/* execute given script */
+/**
+ * Execute the given script either as a function body (executeScript)
+ * or directly (for 'mochitest' like JS Marionette tests)
+ */
 function executeScript(msg, directInject) {
   var script = msg.json.value;
   var args = msg.json.args;
@@ -333,6 +361,7 @@ function executeScript(msg, directInject) {
   Marionette.is_async = false;
   Marionette.win = win;
   Marionette.context = "content";
+  Marionette.logObj = marionetteLogObj;
   applyNamedArgs(args);
 
   var sandbox = new Cu.Sandbox(win);
@@ -344,7 +373,16 @@ function executeScript(msg, directInject) {
   sandbox.Marionette = Marionette;
   try {
     if (directInject) {
+      //we can assume this is a marionette test, so provide convenience funcs:
+      sandbox.is = sandbox.Marionette.is;
+      sandbox.isnot = sandbox.Marionette.isnot;
+      sandbox.ok = sandbox.Marionette.ok;
+      sandbox.log = sandbox.Marionette.log;
+      sandbox.getLogs = sandbox.Marionette.getLogs;
+      sandbox.finish = sandbox.Marionette.finish;
       var res = Cu.evalInSandbox(script, sandbox, "1.8");
+      sendSyncMessage("Marionette:testLog", {value: wrapValue(marionetteLogObj.getLogs())});
+      marionetteLogObj.clearLogs();
       if (res == undefined || res.passed == undefined) {
         sendError("Marionette.finish() not called", 17, null);
       }
@@ -356,6 +394,8 @@ function executeScript(msg, directInject) {
       var scriptSrc = "var __marionetteFunc = function(){" + script +
                     "};  __marionetteFunc.apply(null, __marionetteParams);";
       var res = Cu.evalInSandbox(scriptSrc, sandbox, "1.8");
+      sendSyncMessage("Marionette:testLog", {value: wrapValue(marionetteLogObj.getLogs())});
+      marionetteLogObj.clearLogs();
       sendResponse({value: wrapValue(res)});
     }
   }
@@ -366,15 +406,23 @@ function executeScript(msg, directInject) {
   Marionette.reset();
 }
 
-/* function to set the timeout of asynchronous scripts */
+/**
+ * Function to set the timeout of asynchronous scripts
+ */
 function setScriptTimeout(msg) {
   marionetteTimeout = msg.json.value;
 }
 
+/**
+ * Execute async script
+ */
 function executeAsyncScript(msg) {
   executeWithCallback(msg);
 }
 
+/**
+ * Execute pure JS test. Handles both async and sync cases.
+ */
 function executeJSScript(msg) {
   if (msg.json.timeout) {
     executeWithCallback(msg, msg.json.timeout);
@@ -384,7 +432,14 @@ function executeJSScript(msg) {
   }
 }
 
-/* execute given asynchronous script */
+/**
+ * This function is used by executeAsync and executeJSScript to execute a script
+ * in a sandbox. 
+ * 
+ * For executeJSScript, it will return a message only when the finish() method is called.
+ * For executeAsync, it will return a response when marionetteScriptFinished/arguments[arguments.length-1] 
+ * method is called, or if it times out.
+ */
 function executeWithCallback(msg, timeout) {
   win.addEventListener("unload", errUnload, false);
   var script = msg.json.value;
@@ -402,9 +457,15 @@ function executeWithCallback(msg, timeout) {
   // However Selenium code returns 28, see
   // http://code.google.com/p/selenium/source/browse/trunk/javascript/firefox-driver/js/evaluate.js.
   // We'll stay compatible with the Selenium code.
+
+
   var timeoutSrc = "var timeoutId = window.setTimeout(Marionette.asyncComplete," + marionetteTimeout + ", 'timed out', 28);" + 
+                   "window.addEventListener('error', function (evt) { window.removeEventListener('error', arguments.callee, true); Marionette.asyncComplete(evt.target.status, 17); return true;}, true);" +
                    "window.document.setUserData('__marionetteTimeoutId', timeoutId, null);";
   if (timeout) {
+    if (marionetteTimeout == null || marionetteTimeout == 0) {
+      sendError("Please set a timeout", 21, null);
+    }
     scriptSrc = script + timeoutSrc;
   }
   else {
@@ -419,6 +480,8 @@ function executeWithCallback(msg, timeout) {
   Marionette.is_async = true;
   Marionette.win = win;
   Marionette.context = "content";
+  Marionette.onerror = win.onerror;
+  Marionette.logObj = marionetteLogObj;
   applyNamedArgs(args);
 
   var sandbox = new Cu.Sandbox(win);
@@ -433,6 +496,8 @@ function executeWithCallback(msg, timeout) {
   sandbox.is = Marionette.is;
   sandbox.isnot = Marionette.isnot;
   sandbox.ok = Marionette.ok;
+  sandbox.log = sandbox.Marionette.log;
+  sandbox.getLogs = sandbox.Marionette.getLogs;
   sandbox.finish = Marionette.finish;
   try {
    Cu.evalInSandbox(scriptSrc, sandbox, "1.8");
@@ -442,6 +507,9 @@ function executeWithCallback(msg, timeout) {
   }
 }
 
+/**
+ * Function to set the timeout period for element searching 
+ */
 function setSearchTimeout(msg) {
   marionetteSearchTimeout = parseInt(msg.json.value);
   if(isNaN(marionetteTimeout)){
@@ -452,6 +520,10 @@ function setSearchTimeout(msg) {
   }
 }
 
+/**
+ * Navigate to URI. Handles the case where we navigate within an iframe.
+ * All other navigation is handled by the server (in chrome space).
+ */
 function goUrl(msg) {
   if (activeFrame != null) {
     win.document.location = msg.json.value;
@@ -472,28 +544,43 @@ function goUrl(msg) {
   }
 }
 
+/**
+ * Get the current URI
+ */
 function getUrl(msg) {
   sendResponse({value: win.location.href});
 }
 
+/**
+ * Go back in history 
+ */
 function goBack(msg) {
   win.history.back();
   sendOk();
 }
 
+/**
+ * Go forward in history 
+ */
 function goForward(msg) {
   win.history.forward();
   sendOk();
 }
 
+/**
+ * Refresh the page
+ */
 function refresh(msg) {
   win.location.reload(true);
   var listen = function() { removeEventListener("DOMContentLoaded", arguments.callee, false); sendOk() } ;
   addEventListener("DOMContentLoaded", listen, false);
 }
 
-//Todo: extend to support findChildElement
+/**
+ * Find an element in the document using requested search strategy 
+ */
 function findElement(msg) {
+  //Todo: extend to support findChildElement
   var startTime = msg.json.time ? msg.json.time : new Date().getTime();
   var rootNode = win.document;
   if (elementStrategies.indexOf(msg.json.using) < 0) {
@@ -531,6 +618,9 @@ function findElement(msg) {
   }
 }
 
+/**
+ * Send click event to element
+ */
 function clickElement(msg) {
   var element = getKnownElement([msg.json.element]);
   if (!element) {
@@ -540,6 +630,10 @@ function clickElement(msg) {
   sendOk();
 }
 
+/**
+ * Switch to frame given either the server-assigned element id,
+ * its index in window.frames, or the iframe's name or id.
+ */
 function switchToFrame(msg) {
   var foundFrame = null;
   if ((msg.json.value == null) && (msg.json.element == null)) {
@@ -601,4 +695,5 @@ function switchToFrame(msg) {
   }
 }
 
+//call register self when we get loaded
 registerSelf();

@@ -4049,6 +4049,14 @@ MOZ_ARG_DISABLE_BOOL(tests,
     ENABLE_TESTS=1 )
 
 dnl ========================================================
+dnl Marionette
+dnl ========================================================
+MOZ_ARG_ENABLE_BOOL(marionette,
+[  --enable-marionette     Enable Marionette for remote testing and control],
+    ENABLE_MARIONETTE=1,
+    ENABLE_MARIONETTE)
+
+dnl ========================================================
 dnl =
 dnl = Module specific options
 dnl =
@@ -5019,6 +5027,7 @@ AC_SUBST(MOZ_QUANTIFY)
 AC_SUBST(LIBICONV)
 
 AC_SUBST(ENABLE_TESTS)
+AC_SUBST(ENABLE_MARIONETTE)
 
 AC_SUBST(ENABLE_STRIP)
 AC_SUBST(PKG_SKIP_STRIP)

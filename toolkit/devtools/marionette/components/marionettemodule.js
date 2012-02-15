@@ -1,3 +1,7 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this file,
+ * You can obtain one at http://mozilla.org/MPL/2.0/. */
+
 const {classes: Cc, interfaces: Ci, utils: Cu} = Components;
 
 const kMARIONETTE_CONTRACTID = "@mozilla.org/marionette;1";
@@ -42,13 +46,22 @@ MarionetteModule.prototype = {
       this._loaded = true;
 
       try {
+        //check if marionette pref exists
+        Services.prefs.getBoolPref('marionette.server.enabled');
+      }
+      catch(e) {
+        //create them, but profile must enable them
+        Services.prefs.setBoolPref('marionette.server.enabled', false);
+        Services.prefs.setIntPref('marionette.server.port', 2828);
+      }
+
+      try {
         let port = Services.prefs.getIntPref('marionette.server.port');
         if (Services.prefs.getBoolPref('marionette.server.enabled')) {
           Cu.import('resource:///modules/devtools/dbg-server.jsm');
           DebuggerServer.addActors('resource:///modules/marionette-actors.js');
           DebuggerServer.initTransport();
           DebuggerServer.openListener(port, true);
-          MarionetteLogger.write('opened listener on port ' + port);
         }
       }
       catch(e) {
@@ -65,4 +78,3 @@ MarionetteModule.prototype = {
 };
 
 const NSGetFactory = XPCOMUtils.generateNSGetFactory([MarionetteModule]);
-

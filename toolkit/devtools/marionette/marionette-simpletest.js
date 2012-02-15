@@ -1,3 +1,6 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this file,
+ * You can obtain one at http://mozilla.org/MPL/2.0/. */
 /*
  * The Marionette object, passed to the script context.
  */
@@ -6,10 +9,13 @@ var Marionette = {
   is_async: false,
   win: null,
   tests: [],
+  logObj: null,
+  onerror: null,
 
   reset: function Marionette__reset() {
     Marionette.is_async = false;
     Marionette.tests = [];
+    Marionette.onerror = null;
   },
 
   ok: function Marionette__ok(condition, name, diag) {
@@ -30,6 +36,18 @@ var Marionette = {
     var diag = pass ? Marionette.repr(a) + " should not equal " + Marionette.repr(b)
                     : "didn't expect " + Marionette.repr(a) + ", but got it";
     Marionette.ok(pass, name, diag);
+  },
+
+  log: function Marionette__log(msg, level) {
+    if (Marionette.logObj != null) {
+      Marionette.logObj.log(msg, level);
+    }
+  },
+
+  getLogs: function Marionette__getLogs() {
+    if (Marionette.logObj != null) {
+      Marionette.logObj.getLogs();
+    }
   },
 
   generate_results: function Marionette__generate_results() {
@@ -58,6 +76,7 @@ var Marionette = {
       else {
         Marionette.returnFunc(Marionette.generate_results(), 0);
       }
+      Marionette.win.window.onerror = Marionette.onerror;
     }
     else {
       return Marionette.generate_results();
@@ -74,12 +93,14 @@ var Marionette = {
       var error_msg = {message: value, status: status, stacktrace: null};
       Marionette.__conn.send({from: Marionette.__actorID, error: error_msg});
     }
-    Marionette.__timer.cancel();
-    Marionette.__timer = null;
+    if (Marionette.__timer != null) {
+      Marionette.__timer.cancel();
+      Marionette.__timer = null;
+    }
   },
 
   asyncComplete: function Marionette__async_completed(value, status) {
-      var document = win.window.document;
+      var document = Marionette.win.window.document;
       var __marionetteRes = document.getUserData('__marionetteRes');
       if(__marionetteRes.status == undefined) {
         __marionetteRes.value = value;
@@ -139,6 +160,19 @@ var Marionette = {
           }
       }
       return ostring;
+  },
+
+  defaultWaitForTimeout: 10000,
+  waitFor: function test_waitFor(callback, test, timeout) {
+      if (test()) {
+          callback();
+          return;
+      }
+      timeout = timeout || Date.now();
+      if (Date.now() - timeout > Marionette.defaultWaitForTimeout) {
+          throw 'waitFor timeout';
+      }
+      Marionette.win.window.setTimeout(Marionette.waitFor, 100, callback, test, timeout);
   },
 };
 

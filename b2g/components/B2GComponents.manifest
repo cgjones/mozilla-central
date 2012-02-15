@@ -1,12 +1,8 @@
 # Scrollbars
 category agent-style-sheets browser-content-stylesheet chrome://browser/content/content.css
 
-# Marionette
-component {786a1369-dca5-4adc-8486-33d23c88010a} marionettemodule.js
-contract @mozilla.org/marionette;1 {786a1369-dca5-4adc-8486-33d23c88010a}
-category profile-after-change MarionetteModule @mozilla.org/marionette;1
-
 # CameraContent.js
 component {eff4231b-abce-4f7f-a40a-d646e8fde3ce} CameraContent.js
 contract @mozilla.org/b2g-camera-content;1 {eff4231b-abce-4f7f-a40a-d646e8fde3ce}
 category JavaScript-navigator-property mozCamera @mozilla.org/b2g-camera-content;1
+

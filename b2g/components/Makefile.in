@@ -51,7 +51,6 @@ XPIDLSRCS = \
 EXTRA_PP_COMPONENTS = \
         B2GComponents.manifest \
         CameraContent.js \
-        marionettemodule.js \
         $(NULL)
 
 include $(topsrcdir)/config/rules.mk
