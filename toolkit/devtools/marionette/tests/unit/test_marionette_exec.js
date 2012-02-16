@@ -52,7 +52,7 @@ function test_execute()
         }
         else {
           received = true;
-          do_check_eq('mobile', aPacket.value);
+          do_check_eq('session', aPacket.value);
           transport.send({to: id,
                         type: "executeScript",
                         value: "alert('asdf'); return 2+1;",

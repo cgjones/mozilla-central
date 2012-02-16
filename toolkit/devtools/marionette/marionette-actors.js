@@ -15,6 +15,7 @@ var loader = Cc["@mozilla.org/moz/jssubscript-loader;1"]
              .getService(Ci.mozIJSSubScriptLoader);
 loader.loadSubScript("resource:///modules/marionette-simpletest.js");
 loader.loadSubScript("resource:///modules/marionette-log-obj.js");
+Components.utils.import("resource:///modules/marionette-elements.js");
 
 var prefs = Cc["@mozilla.org/preferences-service;1"]
             .getService(Ci.nsIPrefBranch);
@@ -101,7 +102,7 @@ function MarionetteDriverActor(aConnection)
   this.curBrowser = null; // points to current browser
   this.context = "content";
   this.scriptTimeout = null;
-  this.seenItems = {};
+  this.elementManager = new ElementManager();
   this.timer = null;
   this.marionetteLog = new MarionetteLogObj();
 
@@ -183,9 +184,9 @@ MarionetteDriverActor.prototype = {
     var browser = new BrowserObj(win);
     var winId = win.QueryInterface(Components.interfaces.nsIInterfaceRequestor).getInterface(Components.interfaces.nsIDOMWindowUtils).outerWindowID;
     winId = winId + (isB2G ? '-b2g' : '');
-    if (this.seenItems[winId] == undefined) {
+    if (this.elementManager.seenItems[winId] == undefined) {
       //add this to seenItems so we can guarantee the user will get winId as this window's id
-      this.seenItems[winId] = win; 
+      this.elementManager.seenItems[winId] = win; 
     }
     this.browsers[winId] = browser;
     return winId;
@@ -268,13 +269,21 @@ MarionetteDriverActor.prototype = {
   execute: function MDA_execute(aRequest, directInject) {
     if (this.context == "chrome") {
       var curWindow = this.getCurrentWindow();
+      var args = aRequest.args;
+      try {
+        args = this.elementManager.convertWrappedArguments(args, curWindow);
+      }
+      catch(e) {
+        this.sendError(e.message, e.num, e.stack);
+        return;
+      }
       try {
         Marionette.is_async = false;
         Marionette.tests = [];
         Marionette.context = "chrome";
         Marionette.win = curWindow;
         Marionette.logObj = this.marionetteLog;
-        var params = aRequest.args;
+        this.elementManager.applyNamedArgs(args, Marionette)
         var _chromeSandbox = new Cu.Sandbox(curWindow,
            { sandboxPrototype: curWindow, wantXrays: false, 
              sandboxName: ''});
@@ -293,14 +302,14 @@ MarionetteDriverActor.prototype = {
             this.sendError("Marionette.finish() not called", 500, null);
           }
           else {
-            this.sendResponse(res);
+            this.sendResponse(this.elementManager.wrapValue(res));
           }
         }
         else {
-          _chromeSandbox.__marionetteParams = params;
+          _chromeSandbox.__marionetteParams = args;
           var script = "var func = function() {" + aRequest.value + "}; func.apply(null, __marionetteParams);";
           var res = Cu.evalInSandbox(script, _chromeSandbox, "1.8");
-          this.sendResponse(res);
+          this.sendResponse(this.elementManager.wrapValue(res));
         }
       }
       catch (e) {
@@ -363,8 +372,16 @@ MarionetteDriverActor.prototype = {
    */
   executeWithCallback: function MDA_executeWithCallback(aRequest, timeout) {
     if (this.context == "chrome") {
+      var curWindow = this.getCurrentWindow();
+      var args = aRequest.args;
       try {
-        var curWindow = this.getCurrentWindow();
+        args = this.elementManager.convertWrappedArguments(args, curWindow);
+      }
+      catch(e) {
+        this.sendError(e.message, e.num, e.stack);
+        return;
+      }
+      try {
         Marionette.tests = [];
         Marionette.is_async = true;
         Marionette.context = "chrome";
@@ -373,12 +390,13 @@ MarionetteDriverActor.prototype = {
         Marionette.logObj = this.marionetteLog;
         Marionette.__conn = this.conn;
         Marionette.__actorID = this.actorID;
+        Marionette.__elementManager = this.elementManager;
+        this.elementManager.applyNamedArgs(args, Marionette);
         this.timer = Cc["@mozilla.org/timer;1"].createInstance(Ci.nsITimer);
         Marionette.__timer = this.timer;
-        var params = aRequest.args;
         var _chromeSandbox = new Cu.Sandbox(curWindow,
            { sandboxPrototype: curWindow, wantXrays: false, sandboxName: ''});
-        _chromeSandbox.__marionetteParams = params;
+        _chromeSandbox.__marionetteParams = args;
         _chromeSandbox.Marionette = Marionette;
         _chromeSandbox.is = _chromeSandbox.Marionette.is;
         _chromeSandbox.isnot = _chromeSandbox.Marionette.isnot;
@@ -508,14 +526,38 @@ MarionetteDriverActor.prototype = {
    * Set timeout for searching for elements
    */
   setSearchTimeout: function MDA_setSearchTimeout(aRequest) {
-    this.sendAsync("setSearchTimeout", {value: aRequest.value});
+    if (this.context == "chrome") {
+      try {
+        this.elementManager.setSearchTimeout(aRequest.value);
+        this.sendOk();
+      }
+      catch (e) {
+        this.sendError(e.message, e.num, e.stack);
+      }
+    }
+    else {
+      this.sendAsync("setSearchTimeout", {value: aRequest.value});
+    }
   },
 
   /**
    * Find an element using the indicated search strategy.
    */
   findElement: function MDA_findElement(aRequest) {
-    this.sendAsync("findElement", {value: aRequest.value, using: aRequest.using, element: aRequest.element});
+    if (this.context == "chrome") {
+      var id;
+      try {
+        var notify = this.sendResponse.bind(this);
+        id = this.elementManager.findElement(aRequest, this.getCurrentWindow().document, notify);
+      }
+      catch (e) {
+        this.sendError(e.message, e.num, e.stack);
+        return;
+      }
+    }
+    else {
+      this.sendAsync("findElementContent", {value: aRequest.value, using: aRequest.using, element: aRequest.element});
+    }
   },
 
   /**
@@ -565,7 +607,7 @@ MarionetteDriverActor.prototype = {
     this.messageManager.removeMessageListener("Marionette:register", this);
     this.messageManager.removeMessageListener("Marionette:goUrl", this);
     this.curBrowser = null;
-    this.seenItems = {};
+    this.elementManager.reset();
   },
 
   /**
@@ -602,7 +644,7 @@ MarionetteDriverActor.prototype = {
         var frameObject = curWin.QueryInterface(Components.interfaces.nsIInterfaceRequestor).getInterface(Components.interfaces.nsIDOMWindowUtils).getOuterWindowWithId(message.json.value);
         var reg = this.browsers[this.curBrowser].register(message.json.value, message.json.href);
         if (reg) {
-          this.seenItems[reg] = frameObject; //add to seenItems
+          this.elementManager.seenItems[reg] = frameObject; //add to seenItems
           if (nullPrevious && (this.browsers[this.curBrowser].curFrameId != null)) {
             this.sendAsync("newSession", {B2G: isB2G});
             if (this.browsers[this.curBrowser].newSession) {
@@ -693,7 +735,6 @@ BrowserObj.prototype = {
     }
     else {
       this.type = this.B2G;
-      this.startPage = "homescreen/homescreen.html";
     }
   },
   /**
@@ -779,7 +820,7 @@ BrowserObj.prototype = {
   register: function BO_register(id, href) {
     var uid = id + (this.type == this.B2G ? '-b2g' : '');
     if (this.curFrameId == null) {
-      if ((!this.newSession) || (this.newSession && href.indexOf(this.startPage) > -1)) {
+      if ((!this.newSession) || (this.newSession && ((this.type == this.B2G) || href.indexOf(this.startPage) > -1))) {
         this.curFrameId = uid;
         this.mainContentId = uid;
       }

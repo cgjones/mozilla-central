@@ -49,7 +49,7 @@ function test_executeAsync()
         }
         else {
           received = true;
-          do_check_eq('mobile', aPacket.value);
+          do_check_eq('session', aPacket.value);
           transport.send({to: id,
                         type: "setScriptTimeout",
                         value: "2000",
@@ -110,7 +110,7 @@ function test_executeAsyncTimeout()
         }
         else {
           received = true;
-          do_check_eq('mobile', aPacket.value);
+          do_check_eq('session', aPacket.value);
           transport.send({to: id,
                         type: "setScriptTimeout",
                         value: "2000",
@@ -170,7 +170,7 @@ function test_executeAsyncUnload()
         }
         else {
           received = true;
-          do_check_eq('mobile', aPacket.value);
+          do_check_eq('session', aPacket.value);
           transport.send({to: id,
                         type: "setScriptTimeout",
                         value: "2000",

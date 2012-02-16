@@ -15,6 +15,7 @@ EXTRA_JS_MODULES = \
 	marionette-simpletest.js \
 	marionette-logger.jsm \
 	marionette-log-obj.js \
+	marionette-elements.js \
 	$(NULL)
 
 ifdef ENABLE_TESTS

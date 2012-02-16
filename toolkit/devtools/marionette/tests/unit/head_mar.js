@@ -7,6 +7,5 @@ const Ci = Components.interfaces;
 const Cu = Components.utils;
 const Cr = Components.results;
 
-Cu.import("resource:///modules/dbg-server.jsm");
-Cu.import("resource:///modules/dbg-client.jsm");
-
+Cu.import("resource:///modules/devtools/dbg-server.jsm");
+Cu.import("resource:///modules/devtools/dbg-client.jsm");

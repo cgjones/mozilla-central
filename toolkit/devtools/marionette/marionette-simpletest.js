@@ -87,7 +87,7 @@ var Marionette = {
     if (value == undefined)
       value = null;
     if (status == 0 || status == undefined) {
-      Marionette.__conn.send({from: Marionette.__actorID, value: value, status: status});
+      Marionette.__conn.send({from: Marionette.__actorID, value: Marionette.__elementManager.wrapValue(value), status: status});
     }
     else {
       var error_msg = {message: value, status: status, stacktrace: null};

@@ -46,32 +46,36 @@ MarionetteModule.prototype = {
       this._loaded = true;
 
       try {
-        //check if marionette pref exists
-        Services.prefs.getBoolPref('marionette.server.enabled');
-      }
-      catch(e) {
-        //create them, but profile must enable them
-        Services.prefs.setBoolPref('marionette.server.enabled', false);
-        Services.prefs.setIntPref('marionette.server.port', 2828);
-      }
-
-      try {
-        let port = Services.prefs.getIntPref('marionette.server.port');
-        if (Services.prefs.getBoolPref('marionette.server.enabled')) {
-          Cu.import('resource:///modules/devtools/dbg-server.jsm');
-          DebuggerServer.addActors('resource:///modules/marionette-actors.js');
-          DebuggerServer.initTransport();
-          DebuggerServer.openListener(port, true);
+        Services.prefs.lockPref('marionette.defaultPrefs.enabled');
+        if (Services.prefs.getBoolPref('marionette.defaultPrefs.enabled')) {
+          let port;
+          try {
+            port = Services.prefs.getIntPref('marionette.defaultPrefs.port');
+          }
+          catch(e) {
+            port = 2828;
+          }
+          try {
+            Cu.import('resource:///modules/devtools/dbg-server.jsm');
+            DebuggerServer.addActors('resource:///modules/marionette-actors.js');
+            DebuggerServer.initTransport();
+            DebuggerServer.openListener(port, true);
+          }
+          catch(e) {
+            MarionetteLogger.write('exception: ' + e.name + ', ' + e.message);
+          }
         }
       }
-      catch(e) {
-        dump('exception: ' + e.name + ', ' + e.message);
+      catch (e) {
+        MarionetteLogger.write("marionette not enabled: " + e.name + ": " + e.message);
       }
     }
   },
 
   uninit: function mm_uninit() {
-    DebuggerServer.closeListener();
+    if (Services.prefs.getBoolPref('marionette.defaultPrefs.enabled')) {
+      DebuggerServer.closeListener();
+    }
     this._loaded = false;
   },
 

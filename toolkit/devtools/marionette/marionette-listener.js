@@ -11,28 +11,17 @@ var loader = Components.classes["@mozilla.org/moz/jssubscript-loader;1"]
              .getService(Components.interfaces.mozIJSSubScriptLoader);
 loader.loadSubScript("resource:///modules/marionette-simpletest.js");
 loader.loadSubScript("resource:///modules/marionette-log-obj.js");
+Components.utils.import("resource:///modules/marionette-elements.js");
 var marionetteLogObj = new MarionetteLogObj();
 
 var isB2G = false;
 
-var CLASS_NAME = "class name";
-var SELECTOR = "css selector";
-var ID = "id";
-var NAME = "name";
-var LINK_TEXT = "link text";
-var PARTIAL_LINK_TEXT = "partial link text";
-var TAG = "tag name";
-var XPATH = "xpath";
-var elementStrategies = [CLASS_NAME, SELECTOR, ID, NAME, LINK_TEXT, PARTIAL_LINK_TEXT, TAG, XPATH];
-
 var marionetteTimeout = null;
-var marionetteSearchTimeout = 0; //implicit timeout while searching for items
-var seenItems = {}; //holds the seen elements in content
-var timer = Components.classes["@mozilla.org/timer;1"].createInstance(Components.interfaces.nsITimer);
 var winUtil = content.QueryInterface(Components.interfaces.nsIInterfaceRequestor).getInterface(Components.interfaces.nsIDOMWindowUtils);
 var listenerId = null; //unique ID of this listener
 var activeFrame = null;
 var win = content;
+var elementManager = new ElementManager();
 
 /**
  * Called when listener is first started up. 
@@ -63,7 +52,7 @@ function startListeners() {
   addMessageListener("Marionette:goBack" + listenerId, goBack);
   addMessageListener("Marionette:goForward" + listenerId, goForward);
   addMessageListener("Marionette:refresh" + listenerId, refresh);
-  addMessageListener("Marionette:findElement" + listenerId, findElement);
+  addMessageListener("Marionette:findElementContent" + listenerId, findElementContent);
   addMessageListener("Marionette:clickElement" + listenerId, clickElement);
   addMessageListener("Marionette:switchToFrame" + listenerId, switchToFrame);
   addMessageListener("Marionette:deleteSession" + listenerId, deleteSession);
@@ -112,11 +101,12 @@ function deleteSession(msg) {
   removeMessageListener("Marionette:goBack" + listenerId, goBack);
   removeMessageListener("Marionette:goForward" + listenerId, goForward);
   removeMessageListener("Marionette:refresh" + listenerId, refresh);
-  removeMessageListener("Marionette:findElement" + listenerId, findElement);
+  removeMessageListener("Marionette:findElementContent" + listenerId, findElementContent);
   removeMessageListener("Marionette:clickElement" + listenerId, clickElement);
   removeMessageListener("Marionette:switchToFrame" + listenerId, switchToFrame);
   removeMessageListener("Marionette:deleteSession" + listenerId, deleteSession);
   removeMessageListener("Marionette:sleepSession" + listenerId, sleepSession);
+  this.elementManager.reset();
 }
 
 /*
@@ -160,154 +150,6 @@ function resetValues() {
   Marionette.tests = [];
 }
 
-/*
- * Web Element Helpers
- */
-
-/**
- * Add element to list of seen elements
- */
-function addToKnownElements(element) {
-  for (var i in seenItems) {
-    if (seenItems[i] == element) {
-      return i;
-    }
-  }
-  var id = uuidGen.generateUUID().toString();
-  seenItems[id] = element;
-  return id;
-}
-
-/**
- * Check if the element is still in the document
- */
-function inDocument(element) { 
-  while (element) {
-      if (element == win.document) {
-          return true;
-      }
-      element = element.parentNode;
-  }
-  return false;
-}
-
-/**
- * Retrieve element from its unique ID
- */
-function getKnownElement(id) {
-  var el = seenItems[id];
-  if (!el) {
-    sendError("Element has not been seen before", 17, null);
-    return null;
-  }
-  else if (!inDocument(el)) {
-    sendError("Stale element reference", 10, null);
-    return null;
-  }
-  return el;
-}
-
-/**
- * Convert values to primitives that can be transported over the Marionette
- * JSON protocol.
- */
-function wrapValue(val) {
-  var result;
-  switch(typeof(val)) {
-    case "undefined":
-      result = null;
-      break;
-    case "string":
-    case "number":
-    case "boolean":
-      result = val;
-      break;
-    case "object":
-      if (Object.prototype.toString.call(val) == '[object Array]') {
-        result = [];
-        for (var i in val) {
-          result.push(wrapValue(val[i]));
-        }
-      }
-      else if (val == null) {
-        result = null;
-      }
-      // nodeType 1 == 'element'
-      else if (val.nodeType == 1) {
-        for(var i in seenItems) {
-          if (seenItems[i] == val) {
-            result = {'ELEMENT': i};
-          }
-        }
-        result = {'ELEMENT': addToKnownElements(val)};
-      }
-      else {
-        result = {};
-        for (var prop in val) {
-          result[prop] = wrapValue(val[prop]);
-        }
-      }
-      break;
-  }
-  return result;
-}
-
-/**
- * Convert any ELEMENT references in 'args' to the actual elements
- */
-function convertWrappedArguments(args) {
-  var converted;
-  switch (typeof(args)) {
-    case 'number':
-    case 'string':
-    case 'boolean':
-      converted = args;
-      break;
-    case 'object':
-      if (args == null) {
-        converted = null;
-      }
-      else if (Object.prototype.toString.call(args) == '[object Array]') {
-        converted = [];
-        for (var i in args) {
-          converted.push(convertWrappedArguments(args[i]));
-        }
-      }
-      else if (typeof(args['ELEMENT'] === 'string') &&
-               args.hasOwnProperty('ELEMENT')) {
-        converted = getKnownElement(args['ELEMENT']);
-        if (converted == null)
-          throw "Unknown element: " + args['ELEMENT'];
-      }
-      else {
-        converted = {};
-        for (var prop in args) {
-          converted[prop] = convertWrappedArguments(args[prop]);
-        }
-      }
-      break;
-  }
-  return converted;
-}
-
-/*
- * Execute* helpers
- */
-
-/**
- * Apply any namedArgs to the Marionette object
- */
-function applyNamedArgs(args) {
-  Marionette.namedArgs = {};
-  args.forEach(function(arg) {
-    if (typeof(arg['__marionetteArgs']) === 'object') {
-      for (var prop in arg['__marionetteArgs']) {
-        Marionette.namedArgs[prop] = arg['__marionetteArgs'][prop];
-      }
-    }
-  });
-}
-
 /**
  * send error when we detect an unload event during async scripts
  */
@@ -329,10 +171,10 @@ function asyncResponse() {
   }
 
   var res = win.document.getUserData('__marionetteRes');
-  sendSyncMessage("Marionette:testLog", {value: wrapValue(marionetteLogObj.getLogs())});
+  sendSyncMessage("Marionette:testLog", {value: elementManager.wrapValue(marionetteLogObj.getLogs())});
   marionetteLogObj.clearLogs();
   if (res.status == 0){
-    sendResponse({value: wrapValue(res.value), status: res.status});
+    sendResponse({value: elementManager.wrapValue(res.value), status: res.status});
   }
   else {
     sendError(res.value, res.status, null);
@@ -352,9 +194,10 @@ function executeScript(msg, directInject) {
   var script = msg.json.value;
   var args = msg.json.args;
   try {
-    args = convertWrappedArguments(args);
+    args = elementManager.convertWrappedArguments(args, win);
   }
   catch(e) {
+    sendError(e.message, e.num, e.stack);
     return;
   }
 
@@ -362,7 +205,7 @@ function executeScript(msg, directInject) {
   Marionette.win = win;
   Marionette.context = "content";
   Marionette.logObj = marionetteLogObj;
-  applyNamedArgs(args);
+  elementManager.applyNamedArgs(args, Marionette);
 
   var sandbox = new Cu.Sandbox(win);
   sandbox.window = win;
@@ -381,22 +224,22 @@ function executeScript(msg, directInject) {
       sandbox.getLogs = sandbox.Marionette.getLogs;
       sandbox.finish = sandbox.Marionette.finish;
       var res = Cu.evalInSandbox(script, sandbox, "1.8");
-      sendSyncMessage("Marionette:testLog", {value: wrapValue(marionetteLogObj.getLogs())});
+      sendSyncMessage("Marionette:testLog", {value: elementManager.wrapValue(marionetteLogObj.getLogs())});
       marionetteLogObj.clearLogs();
       if (res == undefined || res.passed == undefined) {
         sendError("Marionette.finish() not called", 17, null);
       }
       else {
-        sendResponse({value: wrapValue(res)});
+        sendResponse({value: elementManager.wrapValue(res)});
       }
     }
     else {
       var scriptSrc = "var __marionetteFunc = function(){" + script +
                     "};  __marionetteFunc.apply(null, __marionetteParams);";
       var res = Cu.evalInSandbox(scriptSrc, sandbox, "1.8");
-      sendSyncMessage("Marionette:testLog", {value: wrapValue(marionetteLogObj.getLogs())});
+      sendSyncMessage("Marionette:testLog", {value: elementManager.wrapValue(marionetteLogObj.getLogs())});
       marionetteLogObj.clearLogs();
-      sendResponse({value: wrapValue(res)});
+      sendResponse({value: elementManager.wrapValue(res)});
     }
   }
   catch (e) {
@@ -446,9 +289,10 @@ function executeWithCallback(msg, timeout) {
   var scriptSrc;
   var args = msg.json.args ? msg.json.args : [];
   try {
-    args = convertWrappedArguments(args);
+    args = elementManager.convertWrappedArguments(args, win);
   }
   catch(e) {
+    sendError(e.message, e.num, e.stack);
     return;
   }
 
@@ -482,7 +326,7 @@ function executeWithCallback(msg, timeout) {
   Marionette.context = "content";
   Marionette.onerror = win.onerror;
   Marionette.logObj = marionetteLogObj;
-  applyNamedArgs(args);
+  elementManager.applyNamedArgs(args, Marionette);
 
   var sandbox = new Cu.Sandbox(win);
   sandbox.window = win;
@@ -511,13 +355,14 @@ function executeWithCallback(msg, timeout) {
  * Function to set the timeout period for element searching 
  */
 function setSearchTimeout(msg) {
-  marionetteSearchTimeout = parseInt(msg.json.value);
-  if(isNaN(marionetteTimeout)){
-    sendError("Not a Number", 17, null);
+  try {
+    elementManager.setSearchTimeout(msg.json.value);
   }
-  else {
-    sendOk();
+  catch (e) {
+    sendError(e.message, e.num, e.stack);
+    return;
   }
+  sendOk();
 }
 
 /**
@@ -579,42 +424,16 @@ function refresh(msg) {
 /**
  * Find an element in the document using requested search strategy 
  */
-function findElement(msg) {
+function findElementContent(msg) {
   //Todo: extend to support findChildElement
-  var startTime = msg.json.time ? msg.json.time : new Date().getTime();
-  var rootNode = win.document;
-  if (elementStrategies.indexOf(msg.json.using) < 0) {
-    sendError("No such strategy", 17, null);
+  var id;
+  try {
+    var notify = function(id) { sendResponse({value:id});};
+    id = elementManager.findElement(msg.json, win.document, notify);
+  }
+  catch (e) {
+    sendError(e.message, e.num, e.stack);
     return;
-  }
-  var element;
-  switch(msg.json.using) {
-    case ID:
-      element = rootNode.getElementById(msg.json.value);
-      break;
-    case NAME:
-      element = rootNode.getElementsByName(msg.json.value)[0];
-      break;
-    case CLASS_NAME:
-      element = rootNode.getElementsByClassName(msg.json.value)[0];
-      break;
-    case TAG:
-      element = rootNode.getElementsByTagName(msg.json.value)[0];
-      break;
-    default:
-      sendError("Strategy not yet supported", 17, null);
-  }
-  if (element) {
-    var id = addToKnownElements(element);
-    sendResponse({value: id});
-  } else {
-    var wait = marionetteSearchTimeout;
-    if (wait == 0 || new Date().getTime() - startTime > wait) {
-      sendError("Unable to locate element: " + msg.json.value, 7, null);
-    } else {
-      msg.json.time = startTime;
-      timer.initWithCallback(function() { findElement(msg) }, 100, Components.interfaces.nsITimer.TYPE_ONE_SHOT);
-    }
   }
 }
 
@@ -622,11 +441,15 @@ function findElement(msg) {
  * Send click event to element
  */
 function clickElement(msg) {
-  var element = getKnownElement([msg.json.element]);
-  if (!element) {
+  var el;
+  try {
+    el = elementManager.getKnownElement([msg.json.element], win);
+  }
+  catch (e) {
+    sendError(e.message, e.num, e.stack);
     return;
   }
-  element.click();
+  el.click();
   sendOk();
 }
 
@@ -644,8 +467,8 @@ function switchToFrame(msg) {
     return;
   }
   if (msg.json.element != undefined) {
-    if (this.seenItems[msg.json.element] != undefined) {
-      var wantedFrame = seenItems[msg.json.element]; //HTMLIFrameElement
+    if (elementManager.seenItems[msg.json.element] != undefined) {
+      var wantedFrame = elementManager.seenItems[msg.json.element]; //HTMLIFrameElement
       var numFrames = win.frames.length;
       for (var i = 0; i < numFrames; i++) {
         if (win.frames[i].frameElement == wantedFrame) {
