@@ -21,7 +21,7 @@ var winUtil = content.QueryInterface(Components.interfaces.nsIInterfaceRequestor
 var listenerId = null; //unique ID of this listener
 var activeFrame = null;
 var win = content;
-var elementManager = new ElementManager();
+var elementManager = new ElementManager([]);
 
 /**
  * Called when listener is first started up. 
@@ -53,6 +53,7 @@ function startListeners() {
   addMessageListener("Marionette:goForward" + listenerId, goForward);
   addMessageListener("Marionette:refresh" + listenerId, refresh);
   addMessageListener("Marionette:findElementContent" + listenerId, findElementContent);
+  addMessageListener("Marionette:findElementsContent" + listenerId, findElementsContent);
   addMessageListener("Marionette:clickElement" + listenerId, clickElement);
   addMessageListener("Marionette:switchToFrame" + listenerId, switchToFrame);
   addMessageListener("Marionette:deleteSession" + listenerId, deleteSession);
@@ -102,6 +103,7 @@ function deleteSession(msg) {
   removeMessageListener("Marionette:goForward" + listenerId, goForward);
   removeMessageListener("Marionette:refresh" + listenerId, refresh);
   removeMessageListener("Marionette:findElementContent" + listenerId, findElementContent);
+  removeMessageListener("Marionette:findElementsContent" + listenerId, findElementsContent);
   removeMessageListener("Marionette:clickElement" + listenerId, clickElement);
   removeMessageListener("Marionette:switchToFrame" + listenerId, switchToFrame);
   removeMessageListener("Marionette:deleteSession" + listenerId, deleteSession);
@@ -429,7 +431,23 @@ function findElementContent(msg) {
   var id;
   try {
     var notify = function(id) { sendResponse({value:id});};
-    id = elementManager.findElement(msg.json, win.document, notify);
+    id = elementManager.find(msg.json, win.document, notify, false);
+  }
+  catch (e) {
+    sendError(e.message, e.num, e.stack);
+    return;
+  }
+}
+
+/**
+ * Find elements in the document using requested search strategy 
+ */
+function findElementsContent(msg) {
+  //Todo: extend to support findChildElement
+  var id;
+  try {
+    var notify = function(id) { sendResponse({value:id});};
+    id = elementManager.find(msg.json, win.document, notify, true);
   }
   catch (e) {
     sendError(e.message, e.num, e.stack);

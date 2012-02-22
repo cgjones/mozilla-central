@@ -102,7 +102,7 @@ function MarionetteDriverActor(aConnection)
   this.curBrowser = null; // points to current browser
   this.context = "content";
   this.scriptTimeout = null;
-  this.elementManager = new ElementManager();
+  this.elementManager = new ElementManager([SELECTOR, NAME, LINK_TEXT, PARTIAL_LINK_TEXT]);
   this.timer = null;
   this.marionetteLog = new MarionetteLogObj();
 
@@ -548,7 +548,7 @@ MarionetteDriverActor.prototype = {
       var id;
       try {
         var notify = this.sendResponse.bind(this);
-        id = this.elementManager.findElement(aRequest, this.getCurrentWindow().document, notify);
+        id = this.elementManager.find(aRequest, this.getCurrentWindow().document, notify, false);
       }
       catch (e) {
         this.sendError(e.message, e.num, e.stack);
@@ -560,6 +560,25 @@ MarionetteDriverActor.prototype = {
     }
   },
 
+  /**
+   * Find elements using the indicated search strategy.
+   */
+  findElements: function MDA_findElements(aRequest) {
+    if (this.context == "chrome") {
+      var id;
+      try {
+        var notify = this.sendResponse.bind(this);
+        id = this.elementManager.find(aRequest, this.getCurrentWindow().document, notify, true);
+      }
+      catch (e) {
+        this.sendError(e.message, e.num, e.stack);
+        return;
+      }
+    }
+    else {
+      this.sendAsync("findElementsContent", {value: aRequest.value, using: aRequest.using, element: aRequest.element});
+    }
+  },
   /**
    * Send click event to element
    */
@@ -682,6 +701,7 @@ MarionetteDriverActor.prototype.requestTypes = {
   "executeJSScript": MarionetteDriverActor.prototype.executeJSScript,
   "setSearchTimeout": MarionetteDriverActor.prototype.setSearchTimeout,
   "findElement": MarionetteDriverActor.prototype.findElement,
+  "findElements": MarionetteDriverActor.prototype.findElements,
   "clickElement": MarionetteDriverActor.prototype.clickElement,
   "goUrl": MarionetteDriverActor.prototype.goUrl,
   "getUrl": MarionetteDriverActor.prototype.getUrl,

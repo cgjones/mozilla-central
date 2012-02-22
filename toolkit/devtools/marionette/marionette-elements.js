@@ -3,11 +3,10 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-var EXPORTED_SYMBOLS = ["ElementManager"];
+var EXPORTED_SYMBOLS = ["ElementManager", "CLASS_NAME", "SELECTOR", "ID", "NAME", "LINK_TEXT", "PARTIAL_LINK_TEXT", "TAG", "XPATH"];
 
 var uuidGen = Components.classes["@mozilla.org/uuid-generator;1"]
              .getService(Components.interfaces.nsIUUIDGenerator);
-var timer = Components.classes["@mozilla.org/timer;1"].createInstance(Components.interfaces.nsITimer);
 
 var CLASS_NAME = "class name";
 var SELECTOR = "css selector";
@@ -17,7 +16,6 @@ var LINK_TEXT = "link text";
 var PARTIAL_LINK_TEXT = "partial link text";
 var TAG = "tag name";
 var XPATH = "xpath";
-var elementStrategies = [CLASS_NAME, SELECTOR, ID, NAME, LINK_TEXT, PARTIAL_LINK_TEXT, TAG, XPATH];
 
 function ElementException(msg, num, stack) {
   this.message = msg;
@@ -25,20 +23,28 @@ function ElementException(msg, num, stack) {
   this.stack = stack;
 }
 
-function ElementManager() {
+function ElementManager(notSupported) {
   this.searchTimeout = 0;
   this.seenItems = {};
+  this.timer = Components.classes["@mozilla.org/timer;1"].createInstance(Components.interfaces.nsITimer);
+  this.elementStrategies = [CLASS_NAME, SELECTOR, ID, NAME, LINK_TEXT, PARTIAL_LINK_TEXT, TAG, XPATH];
+  for (var i = 0; i < notSupported.length; i++) {
+    this.elementStrategies.splice(this.elementStrategies.indexOf(notSupported[i]), 1);
+  }
 }
 
 ElementManager.prototype = {
   /**
-  * Add element to list of seen elements
-  */
+   * Reset values
+   */
   reset: function EM_clear() {
     this.searchTimeout = 0;
     this.seenItems = {};
   },
 
+  /**
+  * Add element to list of seen elements
+  */
   addToKnownElements: function EM_addToKnownElements(element) {
     for (var i in this.seenItems) {
       if (this.seenItems[i] == element) {
@@ -183,27 +189,53 @@ ElementManager.prototype = {
     });
   },
   
-  findElement: function EM_findElement(values, rootNode, notify) {
+  find: function EM_find(values, rootNode, notify, all) {
     var startTime = values.time ? values.time : new Date().getTime();
-    if (elementStrategies.indexOf(values.using) < 0) {
+    if (this.elementStrategies.indexOf(values.using) < 0) {
       throw new ElementException("No such strategy.", 17, null);
     }
+    var found = all ? this.findElements(values.using, values.value, rootNode) : this.findElement(values.using, values.value, rootNode);
+    if (found) {
+      var type = Object.prototype.toString.call(found);
+      if ((type == '[object Array]') || (type == '[object HTMLCollection]')) {
+        var ids = []
+        for (var i = 0 ; i < found.length ; i++) {
+          ids.push(this.addToKnownElements(found[i]));
+        }
+        notify(ids);
+      }
+      else {
+        var id = this.addToKnownElements(found);
+        notify(id);
+      }
+      return;
+    } else {
+      if (this.searchTimeout == 0 || new Date().getTime() - startTime > this.searchTimeout) {
+        throw new ElementException("Unable to locate element: " + values.value, 7, null);
+      } else {
+        values.time = startTime;
+        this.timer.initWithCallback(this.find.bind(this, values, rootNode, notify, all), 100, Components.interfaces.nsITimer.TYPE_ONE_SHOT);
+      }
+    }
+  },
+  
+  findElement: function EM_findElement(using, value, rootNode) {
     var element;
-    switch(values.using) {
+    switch (using) {
       case ID:
-        element = rootNode.getElementById(values.value);
+        element = rootNode.getElementById(value);
         break;
       case NAME:
-        element = rootNode.getElementsByName(values.value)[0];
+        element = rootNode.getElementsByName(value)[0];
         break;
       case CLASS_NAME:
-        element = rootNode.getElementsByClassName(values.value)[0];
+        element = rootNode.getElementsByClassName(value)[0];
         break;
       case TAG:
-        element = rootNode.getElementsByTagName(values.value)[0];
+        element = rootNode.getElementsByTagName(value)[0];
         break;
       case XPATH:
-        element = rootNode.evaluate(values.value, rootNode, null,
+        element = rootNode.evaluate(value, rootNode, null,
                     Components.interfaces.nsIDOMXPathResult.FIRST_ORDERED_NODE_TYPE, null).
                     singleNodeValue;
         break;
@@ -212,35 +244,70 @@ ElementManager.prototype = {
         var allLinks = rootNode.getElementsByTagName('A');
         for (var i = 0; i < allLinks.length && !element; i++) {
           var text = allLinks[i].text;
-          if (PARTIAL_LINK_TEXT == values.using) {
-            if (text.indexOf(values.value) != -1) {
+          if (PARTIAL_LINK_TEXT == using) {
+            if (text.indexOf(value) != -1) {
               element = allLinks[i];
             }
-          } else if (text == values.value) {
+          } else if (text == value) {
             element = allLinks[i];
           }
         }
         break;
       case SELECTOR:
-        element = rootNode.querySelector(values.value);
+        element = rootNode.querySelector(value);
         break;
       default:
         throw new ElementException("No such strategy", 500, null);
     }
-    if (element) {
-      var id = this.addToKnownElements(element);
-      notify(id);
-      return;
-    } else {
-      if (this.searchTimeout == 0 || new Date().getTime() - startTime > this.searchTimeout) {
-        throw new ElementException("Unable to locate element: " + values.value, 7, null);
-      } else {
-        values.time = startTime;
-        timer.initWithCallback(this.findElement.bind(this, values, rootNode, notify), 100, Components.interfaces.nsITimer.TYPE_ONE_SHOT);
-      }
-    }
+    return element;
   },
-  
+
+  findElements: function EM_findElements(using, value, rootNode) {
+    var elements = [];
+    switch (using) {
+      case ID:
+        value = './/*[@id="' + value + '"]';
+      case XPATH:
+        values = rootNode.evaluate(value, rootNode, null,
+                    Components.interfaces.nsIDOMXPathResult.ORDERED_NODE_ITERATOR_TYPE, null)
+        var element = values.iterateNext();
+        while (element) {
+          elements.push(element);
+          element = values.iterateNext();
+        }
+        break;
+      case NAME:
+        elements = rootNode.getElementsByName(value);
+        break;
+      case CLASS_NAME:
+        elements = rootNode.getElementsByClassName(value);
+        break;
+      case TAG:
+        elements = rootNode.getElementsByTagName(value);
+        break;
+      case LINK_TEXT:
+      case PARTIAL_LINK_TEXT:
+        var allLinks = rootNode.getElementsByTagName('A');
+        for (var i = 0; i < allLinks.length; i++) {
+          var text = allLinks[i].text;
+          if (PARTIAL_LINK_TEXT == using) {
+            if (text.indexOf(value) != -1) {
+              elements.push(allLinks[i]);
+            }
+          } else if (text == value) {
+            elements.push(allLinks[i]);
+          }
+        }
+        break;
+      case SELECTOR:
+        elements = rootNode.querySelectorAll(value);
+        break;
+      default:
+        throw new ElementException("No such strategy", 500, null);
+    }
+    return elements;
+  },
+
   /**
    * Sets the timeout for searching for elements with find element
    */
