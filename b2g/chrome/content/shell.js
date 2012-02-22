@@ -193,6 +193,7 @@ var shell = {
       case 'keypress':
         switch (evt.keyCode) {
           case evt.DOM_VK_HOME:
+            this.turnScreenOn();
             this.sendEvent(content, 'home');
             break;
           case evt.DOM_VK_SLEEP:
