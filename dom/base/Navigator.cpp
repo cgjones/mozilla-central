@@ -958,8 +958,12 @@ Navigator::GetMozBattery(nsIDOMMozBatteryManager** aBattery)
 NS_IMETHODIMP
 Navigator::GetMozPower(nsIDOMMozPowerManager** aPower)
 {
+  *aPower = nsnull;
+
   if (!mPowerManager) {
+    nsCOMPtr<nsPIDOMWindow> win(do_QueryReferent(mWindow));
     mPowerManager = new power::PowerManager();
+    mPowerManager->Init(win);
   }
 
   NS_ADDREF(*aPower = mPowerManager);

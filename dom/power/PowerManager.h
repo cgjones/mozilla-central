@@ -38,6 +38,8 @@
 #define mozilla_dom_power_PowerManager_h
 
 #include "nsIDOMPowerManager.h"
+#include "nsIDOMWindow.h"
+#include "nsWeakReference.h"
 
 namespace mozilla {
 namespace dom {
@@ -52,6 +54,13 @@ public:
 
   PowerManager() {};
   virtual ~PowerManager() {};
+
+  nsresult Init(nsIDOMWindow *aWindow);
+
+private:
+  nsresult CheckPermission();
+
+  nsWeakPtr mWindow;
 };
 
 } // namespace power

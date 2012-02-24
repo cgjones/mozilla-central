@@ -39,6 +39,7 @@
 #include "nsContentUtils.h"
 #include "nsDOMClassInfoID.h"
 #include "nsIPowerManagerService.h"
+#include "nsIPrincipal.h"
 #include "nsServiceManagerUtils.h"
 
 DOMCI_DATA(MozPowerManager, mozilla::dom::power::PowerManager)
@@ -56,10 +57,36 @@ NS_INTERFACE_MAP_END
 NS_IMPL_ADDREF(PowerManager)
 NS_IMPL_RELEASE(PowerManager)
 
+nsresult
+PowerManager::Init(nsIDOMWindow *aWindow)
+{
+  mWindow = do_GetWeakReference(aWindow);
+
+  return NS_OK;
+}
+
+nsresult
+PowerManager::CheckPermission()
+{
+  nsCOMPtr<nsPIDOMWindow> win = do_QueryReferent(mWindow);
+  NS_ENSURE_STATE(win);
+  nsCOMPtr<nsIDocument> doc = do_QueryInterface(win->GetExtantDocument());
+  NS_ENSURE_STATE(doc);
+
+  nsCOMPtr<nsIURI> uri;
+  doc->NodePrincipal()->GetURI(getter_AddRefs(uri));
+
+  if (!nsContentUtils::URIIsChromeOrInPref(uri, "dom.power.whitelist")) {
+    return NS_ERROR_DOM_SECURITY_ERR;
+  }
+
+  return NS_OK;
+}
+
 NS_IMETHODIMP
 PowerManager::Reboot()
 {
-  NS_ENSURE_TRUE(nsContentUtils::IsCallerChrome(), NS_ERROR_DOM_SECURITY_ERR);
+  NS_ENSURE_SUCCESS(CheckPermission(), NS_ERROR_DOM_SECURITY_ERR);
 
   nsCOMPtr<nsIPowerManagerService> pmService =
     do_GetService(POWERMANAGERSERVICE_CONTRACTID);
@@ -73,7 +100,7 @@ PowerManager::Reboot()
 NS_IMETHODIMP
 PowerManager::PowerOff()
 {
-  NS_ENSURE_TRUE(nsContentUtils::IsCallerChrome(), NS_ERROR_DOM_SECURITY_ERR);
+  NS_ENSURE_SUCCESS(CheckPermission(), NS_ERROR_DOM_SECURITY_ERR);
 
   nsCOMPtr<nsIPowerManagerService> pmService =
     do_GetService(POWERMANAGERSERVICE_CONTRACTID);

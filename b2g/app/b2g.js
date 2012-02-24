@@ -439,6 +439,7 @@ pref("b2g.keys.search.enabled", false);
 
 // Screen timeout in minutes
 pref("power.screen.timeout", 60);
+pref("dom.power.whitelist", "file://,http://localhost:7777");
 
 pref("full-screen-api.enabled", true);
 
