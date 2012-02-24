@@ -64,6 +64,14 @@ LOCAL_INCLUDES = \
   -I$(topsrcdir)/content/events/src \
   $(NULL)
 
+ifdef MOZ_B2G_RIL
+EXTRA_JS_MODULES = EventTarget.jsm
+EXTRA_COMPONENTS = \
+  MobileConnection.js \
+  MobileConnection.manifest \
+  $(NULL)
+endif
+
 include $(topsrcdir)/config/config.mk
 include $(topsrcdir)/ipc/chromium/chromium-config.mk
 include $(topsrcdir)/config/rules.mk

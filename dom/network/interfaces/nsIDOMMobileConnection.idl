@@ -1,0 +1,82 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this file,
+ * You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+#include "nsIDOMEventTarget.idl"
+
+interface nsIDOMEventListener;
+
+[scriptable, uuid(ba2be619-fed6-4652-865a-c61f88ffeaa8)]
+interface nsIDOMMozMobileConnection : nsIDOMEventTarget
+{
+   /**
+    * Indicates the state of the device's ICC card.
+    *
+    * Possible values: null, 'absent', 'pin_required', 'puk_required',
+    * 'network_locked', 'ready'.
+    */
+   readonly attribute DOMString cardState;
+   
+   /**
+    * Indicates whether the device is connected to a mobile network.
+    */
+   readonly attribute bool connected;
+   
+   /**
+    * Indicates whether the connection is going through a foreign operator
+    * (roaming) or not.
+    */
+   readonly attribute bool roaming;
+   
+   /**
+    * Operator name.
+    */
+   readonly attribute DOMString operator;
+   
+   /**
+    * Type of connection.
+    *
+    * Possible values: 'gprs', 'edge', 'umts', 'hsdpa', 'evdo0', 'evdoa',
+    * 'evdob', etc.
+    */
+   readonly attribute DOMString type;
+   
+   /**
+    * Signal strength as defined by 3GPP TS 27.007 specification, section 8.5.
+    *
+    * Possible values:
+    *   0       -113 dBm or less
+    *   1       -111 dBm
+    *   2...30  -109 ... -53 dBm
+    *   31      -51 dBm or greater
+    *   null    if no signal strength (or signal) is available.
+    */
+   readonly attribute jsval signalStrength;
+   
+   /**
+    * Signal strength expressed as number of "bars".
+    *
+    * Possible values: null (no signal / not registered) or a number betweeen
+    * 0 (weakest signal) and 4 (full signal).
+    */
+   readonly attribute jsval bars;
+   
+   /**
+    * The 'cardstatechange' event is notified when the 'cardState' attribute
+    * changes value.
+    */
+   attribute nsIDOMEventListener oncardstatechange;
+   
+   /**
+    * The 'connectionchange' event is notified whenever one of the 'connected',
+    * 'roaming', 'operator', 'type' attributes change, since typically many or
+    * all of them change together.
+    */
+   attribute nsIDOMEventListener onconnectionchange;
+    
+   /**
+    * The 'signalstrengthchange' event is notified whenever the signal strength
+    * changes value. The 'bars' attribute is updated accordingly.
+    */
+   attribute nsIDOMEventListener onsignalstrengthchange;
+};

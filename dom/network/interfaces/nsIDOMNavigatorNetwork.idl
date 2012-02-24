@@ -38,8 +38,9 @@
 
 interface nsIDOMMozConnection;
 
-[scriptable, uuid(1dd6773e-30dc-419b-9766-b05458fd96c8)]
+[scriptable, uuid(c428e8af-9566-415d-b7e9-86c0885d9d18)]
 interface nsIDOMMozNavigatorNetwork : nsISupports
 {
   readonly attribute nsIDOMMozConnection mozConnection;
+  //readonly attribute nsIDOMMozConnection mozMobileConnection;
 };

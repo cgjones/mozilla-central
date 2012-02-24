@@ -1,0 +1,4 @@
+# MobileConnection.js
+component {75e6e937-d628-4047-9ca3-fa93d360babb} MobileConnection.js
+contract @mozilla.org/dom/mobileconnection;1 {75e6e937-d628-4047-9ca3-fa93d360babb}
+category JavaScript-navigator-property mozMobileConnection @mozilla.org/dom/mobileconnection;1
