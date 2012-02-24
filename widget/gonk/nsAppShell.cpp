@@ -55,6 +55,7 @@
 #include "mozilla/FileUtils.h"
 #include "mozilla/HalSensor.h"
 #include "mozilla/Mutex.h"
+#include "mozilla/Preferences.h"
 #include "mozilla/Services.h"
 #include "nsAppShell.h"
 #include "nsDOMTouchEvent.h"
@@ -684,6 +685,10 @@ public:
     : mLastUpdate(0) {
   }
   void Notify(const SensorData& aSensorData) {
+    bool enabled = Preferences::GetBool("b2g.sensor.orientation.enabled", false);
+    if (!enabled)
+      return;
+
     nsCOMPtr<nsIScreenManager> screenMgr =
         do_GetService("@mozilla.org/gfx/screenmanager;1");
     nsCOMPtr<nsIScreen> screen;

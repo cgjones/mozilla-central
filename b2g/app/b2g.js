@@ -443,3 +443,6 @@ pref("power.screen.timeout", 60);
 pref("full-screen-api.enabled", true);
 
 pref("media.volume.steps", 10);
+
+// Screen orientation
+pref("b2g.sensor.orientation.enabled", false);
