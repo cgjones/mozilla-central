@@ -15,7 +15,7 @@ var loader = Cc["@mozilla.org/moz/jssubscript-loader;1"]
              .getService(Ci.mozIJSSubScriptLoader);
 loader.loadSubScript("resource:///modules/marionette-simpletest.js");
 loader.loadSubScript("resource:///modules/marionette-log-obj.js");
-Components.utils.import("resource:///modules/marionette-elements.js");
+Cu.import("resource:///modules/marionette-elements.js");
 
 var prefs = Cc["@mozilla.org/preferences-service;1"]
             .getService(Ci.nsIPrefBranch);
@@ -94,6 +94,9 @@ MarionetteRootActor.prototype.requestTypes = {
 
 function MarionetteDriverActor(aConnection)
 {
+  this.uuidGen = Cc["@mozilla.org/uuid-generator;1"]
+                 .getService(Ci.nsIUUIDGenerator);
+
   this.conn = aConnection;
   this.messageManager = Cc["@mozilla.org/globalmessagemanager;1"].
                              getService(Ci.nsIChromeFrameMessageManager);
@@ -105,6 +108,7 @@ function MarionetteDriverActor(aConnection)
   this.elementManager = new ElementManager([SELECTOR, NAME, LINK_TEXT, PARTIAL_LINK_TEXT]);
   this.timer = null;
   this.marionetteLog = new MarionetteLogObj();
+  this.command_id = null;
 
   //register all message listeners
   this.messageManager.addMessageListener("Marionette:ok", this);
@@ -132,27 +136,38 @@ MarionetteDriverActor.prototype = {
    */
 
   /**
-    * Send response value to client
+    * Generic method to pass a response to the client
     */
-  sendResponse: function MDA_sendResponse(value) {
+  sendToClient: function MDA_sendToClient(msg, command_id) {
+    MarionetteLogger.write("sendToClient: " + JSON.stringify(msg) + ", " + command_id + ", " + this.command_id);
+    if (command_id == undefined || command_id == this.command_id) {
+      this.conn.send(msg);
+      this.command_id = null;
+    }
+  },
+
+  /**
+    * Send a value to client
+    */
+  sendResponse: function MDA_sendResponse(value, command_id) {
     if (typeof(value) == 'undefined')
         value = null;
-    this.conn.send({from:this.actorID, value: value});
+    this.sendToClient({from:this.actorID, value: value}, command_id);
   },
 
   /**
    * Send ack to client
    */
-  sendOk: function MDA_sendOk() {
-    this.conn.send({from:this.actorID, ok: true});
+  sendOk: function MDA_sendOk(command_id) {
+    this.sendToClient({from:this.actorID, ok: true}, command_id);
   },
 
   /**
    * Send error message to client
    */
-  sendError: function MDA_sendError(message, status, trace) {
+  sendError: function MDA_sendError(message, status, trace, command_id) {
     var error_msg = {message: message, status: status, stacktrace: trace};
-    this.conn.send({from:this.actorID, error: error_msg});
+    this.sendToClient({from:this.actorID, error: error_msg}, command_id);
   },
 
   /**
@@ -182,7 +197,8 @@ MarionetteDriverActor.prototype = {
    */
   addBrowser: function MDA_addBrowser(win) {
     var browser = new BrowserObj(win);
-    var winId = win.QueryInterface(Components.interfaces.nsIInterfaceRequestor).getInterface(Components.interfaces.nsIDOMWindowUtils).outerWindowID;
+    var winId = win.QueryInterface(Ci.nsIInterfaceRequestor).
+                    getInterface(Ci.nsIDOMWindowUtils).outerWindowID;
     winId = winId + (isB2G ? '-b2g' : '');
     if (this.elementManager.seenItems[winId] == undefined) {
       //add this to seenItems so we can guarantee the user will get winId as this window's id
@@ -263,62 +279,92 @@ MarionetteDriverActor.prototype = {
   },
 
   /**
+   * Returns a chrome sandbox that can be used by the execute_foo functions.
+   */
+  createExecuteSandbox: function MDA_createExecuteSandbox(aWindow, marionette, args) {
+    try {
+      args = this.elementManager.convertWrappedArguments(args, aWindow);
+    }
+    catch(e) {
+      this.sendError(e.message, e.num, e.stack);
+      return;
+    }
+
+    let _chromeSandbox = new Cu.Sandbox(aWindow,
+       { sandboxPrototype: aWindow, wantXrays: false, sandboxName: ''});
+    _chromeSandbox.__namedArgs = this.elementManager.applyNamedArgs(args);
+    _chromeSandbox.__marionetteParams = args;
+
+    marionette.exports.forEach(function(fn) {
+      _chromeSandbox[fn] = marionette[fn].bind(marionette);
+    });
+
+    return _chromeSandbox;
+  },
+
+  /**
+   * Executes a script in the given sandbox.
+   */
+  executeScriptInSandbox: function MDA_executeScriptInSandbox(sandbox, script,
+     directInject, async) {
+    try {
+      if (directInject && async &&
+          (this.scriptTimeout == null || this.scriptTimeout == 0)) {
+        this.sendError("Please set a timeout", 21, null);
+        return;
+      }
+
+      let res = Cu.evalInSandbox(script, sandbox, "1.8");
+
+      if (directInject && !async &&
+          (res == undefined || res.passed == undefined)) {
+        this.sendError("finish() not called", 500, null);
+        return;
+      }
+
+      if (!async) {
+        this.sendResponse(this.elementManager.wrapValue(res));
+      }
+    }
+    catch (e) {
+      this.sendError(e.name + ': ' + e.message, 17, e.stack);
+    }
+  },
+
+  /**
    * Execute the given script either as a function body (executeScript)
    * or directly (for 'mochitest' like JS Marionette tests)
    */
   execute: function MDA_execute(aRequest, directInject) {
-    if (this.context == "chrome") {
-      var curWindow = this.getCurrentWindow();
-      var args = aRequest.args;
-      try {
-        args = this.elementManager.convertWrappedArguments(args, curWindow);
-      }
-      catch(e) {
-        this.sendError(e.message, e.num, e.stack);
-        return;
-      }
-      try {
-        Marionette.is_async = false;
-        Marionette.tests = [];
-        Marionette.context = "chrome";
-        Marionette.win = curWindow;
-        Marionette.logObj = this.marionetteLog;
-        this.elementManager.applyNamedArgs(args, Marionette)
-        var _chromeSandbox = new Cu.Sandbox(curWindow,
-           { sandboxPrototype: curWindow, wantXrays: false, 
-             sandboxName: ''});
-        _chromeSandbox.Marionette = Marionette;
-        if (directInject) {
-          //we can assume this is a marionette test, so provide convenience funcs:
-          _chromeSandbox.is = _chromeSandbox.Marionette.is;
-          _chromeSandbox.isnot = _chromeSandbox.Marionette.isnot;
-          _chromeSandbox.ok = _chromeSandbox.Marionette.ok;
-          _chromeSandbox.log = _chromeSandbox.Marionette.log;
-          _chromeSandbox.getLogs = _chromeSandbox.Marionette.getLogs;
-          _chromeSandbox.finish = _chromeSandbox.Marionette.finish;
-          //run the given script directly
-          var res = Cu.evalInSandbox(aRequest.value, _chromeSandbox, "1.8");
-          if (res == undefined || res.passed == undefined) {
-            this.sendError("Marionette.finish() not called", 500, null);
-          }
-          else {
-            this.sendResponse(this.elementManager.wrapValue(res));
-          }
-        }
-        else {
-          _chromeSandbox.__marionetteParams = args;
-          var script = "var func = function() {" + aRequest.value + "}; func.apply(null, __marionetteParams);";
-          var res = Cu.evalInSandbox(script, _chromeSandbox, "1.8");
-          this.sendResponse(this.elementManager.wrapValue(res));
-        }
-      }
-      catch (e) {
-        this.sendError(e.name + ': ' + e.message, 17, e.stack);
-      }
-      Marionette.reset();
-    }
-    else {
+    if (this.context == "content") {
       this.sendAsync("executeScript", {value: aRequest.value, args: aRequest.args});
+      return;
+    }
+
+    let curWindow = this.getCurrentWindow();
+    let marionette = new Marionette(false, curWindow, "chrome", this.marionetteLog);
+    let _chromeSandbox = this.createExecuteSandbox(curWindow, marionette, aRequest.args);
+    if (!_chromeSandbox)
+      return;
+
+    try {
+      _chromeSandbox.finish = function chromeSandbox_finish() {
+        return marionette.generate_results();
+      };
+
+      if (directInject) {
+        var script = aRequest.value;
+      }
+      else {
+        var script = "var func = function() {" +
+                       aRequest.value + 
+                     "};" +
+                     "func.apply(null, __marionetteParams);";
+      }
+      this.executeScriptInSandbox(_chromeSandbox, script, directInject, false);
+    }
+    catch (e) {
+      this.sendError(e.name + ': ' + e.message, 17, e.stack);
     }
   },
 
@@ -370,67 +416,83 @@ MarionetteDriverActor.prototype = {
    * For executeAsync, it will return a response when marionetteScriptFinished/arguments[arguments.length-1] 
    * method is called, or if it times out.
    */
-  executeWithCallback: function MDA_executeWithCallback(aRequest, timeout) {
-    if (this.context == "chrome") {
-      var curWindow = this.getCurrentWindow();
-      var args = aRequest.args;
-      try {
-        args = this.elementManager.convertWrappedArguments(args, curWindow);
-      }
-      catch(e) {
-        this.sendError(e.message, e.num, e.stack);
-        return;
-      }
-      try {
-        Marionette.tests = [];
-        Marionette.is_async = true;
-        Marionette.context = "chrome";
-        Marionette.win = curWindow;
-        Marionette.onerror = curWindow.onerror;
-        Marionette.logObj = this.marionetteLog;
-        Marionette.__conn = this.conn;
-        Marionette.__actorID = this.actorID;
-        Marionette.__elementManager = this.elementManager;
-        this.elementManager.applyNamedArgs(args, Marionette);
-        this.timer = Cc["@mozilla.org/timer;1"].createInstance(Ci.nsITimer);
-        Marionette.__timer = this.timer;
-        var _chromeSandbox = new Cu.Sandbox(curWindow,
-           { sandboxPrototype: curWindow, wantXrays: false, sandboxName: ''});
-        _chromeSandbox.__marionetteParams = args;
-        _chromeSandbox.Marionette = Marionette;
-        _chromeSandbox.is = _chromeSandbox.Marionette.is;
-        _chromeSandbox.isnot = _chromeSandbox.Marionette.isnot;
-        _chromeSandbox.ok = _chromeSandbox.Marionette.ok;
-        _chromeSandbox.log = _chromeSandbox.Marionette.log;
-        _chromeSandbox.getLogs = _chromeSandbox.Marionette.getLogs;
-        _chromeSandbox.finish = _chromeSandbox.Marionette.finish;
-        var script;
-        //define the timeout function and catch any potential errors thrown by the user script
-        var timeoutScript = 'var timeoutFunc = function() {Marionette.returnFunc("timed out", 28);};'
-                           + 'window.onerror = function (errorMsg, url, lineNumber) {'
-                           + 'Marionette.returnFunc(errorMsg + " at: " + url + " line: " + lineNumber, 17); ; return true};'
-                           + 'if(Marionette.__timer != null) {Marionette.__timer.initWithCallback(timeoutFunc, '+ this.scriptTimeout +', Components.interfaces.nsITimer.TYPE_ONE_SHOT);}';
-        if (timeout) {
-          if (this.scriptTimeout == null || this.scriptTimeout == 0) {
-            this.sendError("Please set a timeout", 21, null);
-          }
-          //don't wrap sent JS in function
-          script = aRequest.value + timeoutScript;
+  executeWithCallback: function MDA_executeWithCallback(aRequest, directInject) {
+    this.command_id = this.uuidGen.generateUUID().toString();
+
+    if (this.context == "content") {
+      this.sendAsync("executeAsyncScript", {value: aRequest.value,
+                                            args: aRequest.args,
+                                            id: this.command_id});
+      return;
+    }
+
+    let curWindow = this.getCurrentWindow();
+    let original_onerror = curWindow.onerror;
+    let that = this;
+    let marionette = new Marionette(true, curWindow, "chrome", this.marionetteLog);
+    marionette.command_id = this.command_id;
+
+    function chromeAsyncReturnFunc(value, status) {
+      if (value == undefined)
+        value = null;
+      if (that.command_id == marionette.command_id) {
+        if (that.timer != null) {
+          that.timer.cancel();
+          that.timer = null;
+        }
+
+        curWindow.onerror = original_onerror;
+
+        if (status == 0 || status == undefined) {
+          that.sendToClient({from: that.actorID, value: that.elementManager.wrapValue(value), status: status},
+                            marionette.command_id);
         }
         else {
-          script = '__marionetteParams.push(Marionette.returnFunc);'
-                  + 'var marionetteScriptFinished = Marionette.returnFunc;'
-                  + 'var __marionetteFunc = function() {' + aRequest.value + '};'
-                  + '__marionetteFunc.apply(null, __marionetteParams);'
-                  + timeoutScript;
+          var error_msg = {message: value, status: status, stacktrace: null};
+          that.sendToClient({from: that.actorID, error: error_msg},
+                            marionette.command_id);
         }
-        Cu.evalInSandbox(script, _chromeSandbox, "1.8");
-      } catch (e) {
-        this.sendError(e.name + ": " + e.message, 17, e.stack);
       }
     }
-    else {
-      this.sendAsync("executeAsyncScript", {value: aRequest.value, args: aRequest.args});
+
+    curWindow.onerror = function (errorMsg, url, lineNumber) {
+      chromeAsyncReturnFunc(errorMsg + " at: " + url + " line: " + lineNumber, 17);
+      return true;
+    };
+
+    function chromeAsyncFinish() {
+      chromeAsyncReturnFunc(marionette.generate_results(), 0);
+    }
+
+    let _chromeSandbox = this.createExecuteSandbox(curWindow, marionette, aRequest.args);
+    if (!_chromeSandbox)
+      return;
+
+    try {
+
+      this.timer = Cc["@mozilla.org/timer;1"].createInstance(Ci.nsITimer);
+      if (this.timer != null) {
+        this.timer.initWithCallback(function() {
+          chromeAsyncReturnFunc("timed out", 28);
+        }, that.scriptTimeout, Ci.nsITimer.TYPE_ONESHOT);
+      }
+
+      _chromeSandbox.returnFunc = chromeAsyncReturnFunc;
+      _chromeSandbox.finish = chromeAsyncFinish;
+
+      if (directInject) {
+        var script = aRequest.value;
+      }
+      else {
+        var script =  '__marionetteParams.push(returnFunc);'
+                + 'var marionetteScriptFinished = returnFunc;'
+                + 'var __marionetteFunc = function() {' + aRequest.value + '};'
+                + '__marionetteFunc.apply(null, __marionetteParams);';
+      }
+
+      this.executeScriptInSandbox(_chromeSandbox, script, directInject, true);
+    } catch (e) {
+      this.sendError(e.name + ": " + e.message, 17, e.stack, marionette.command_id);
     }
   },
 
@@ -639,13 +701,13 @@ MarionetteDriverActor.prototype = {
         this.messageManager.removeMessageListener("DOMContentLoaded", this, true);
         break;
       case "Marionette:done":
-        this.sendResponse(message.json.value);
+        this.sendResponse(message.json.value, message.json.command_id);
         break;
       case "Marionette:ok":
-        this.sendOk();
+        this.sendOk(message.json.command_id);
         break;
       case "Marionette:error":
-        this.sendError(message.json.message, message.json.status, message.json.stacktrace);
+        this.sendError(message.json.message, message.json.status, message.json.stacktrace, message.json.command_id);
         break;
       case "Marionette:log":
         //log server-side messages

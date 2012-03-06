@@ -176,17 +176,18 @@ ElementManager.prototype = {
    */
   
   /**
-   * Apply any namedArgs to the Marionette object
+   * Return an object with any namedArgs applied to it.
    */
-  applyNamedArgs: function EM_applyNamedArgs(args, marionette_obj) {
-    marionette_obj.namedArgs = {};
+  applyNamedArgs: function EM_applyNamedArgs(args) {
+    namedArgs = {};
     args.forEach(function(arg) {
       if (typeof(arg['__marionetteArgs']) === 'object') {
         for (var prop in arg['__marionetteArgs']) {
-          marionette_obj.namedArgs[prop] = arg['__marionetteArgs'][prop];
+          namedArgs[prop] = arg['__marionetteArgs'][prop];
         }
       }
     });
+    return namedArgs;
   },
   
   find: function EM_find(values, rootNode, notify, all) {
