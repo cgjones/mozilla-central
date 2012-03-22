@@ -394,10 +394,6 @@ pref("dom.screenEnabledProperty.enabled", true);
 pref("dom.screenBrightnessProperty.enabled", true);
 pref("dom.mozScreenWhitelist", "http://localhost:7777");
 
-//Enable/disable marionette server, set listening port
-pref("marionette.defaultPrefs.enabled", true);
-pref("marionette.defaultPrefs.port", 2828);
-
 // handle links targeting new windows
 // 1=current window/tab, 2=new window, 3=new tab in most recent window
 pref("browser.link.open_newwindow", 3);
@@ -464,3 +460,8 @@ pref("ril.data.roaming.enabled", false);
 pref("ril.data.apn", "");
 pref("ril.data.user", "");
 pref("ril.data.passwd", "");
+
+//Enable/disable marionette server, set listening port
+pref("marionette.defaultPrefs.enabled", true);
+pref("marionette.defaultPrefs.port", 2828);
+

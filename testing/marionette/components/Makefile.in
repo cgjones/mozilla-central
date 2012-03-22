@@ -9,21 +9,9 @@ VPATH = @srcdir@
 
 include $(DEPTH)/config/autoconf.mk
 
-EXTRA_JS_MODULES = \
-	marionette-listener.js \
-	marionette-actors.js \
-	marionette-simpletest.js \
-	marionette-logger.jsm \
-	marionette-log-obj.js \
-	marionette-elements.js \
-	$(NULL)
-
-ifdef ENABLE_TESTS
-    DIRS += tests
-endif
-
-ifdef ENABLE_MARIONETTE
-    DIRS += components
-endif
+EXTRA_PP_COMPONENTS = \
+        MarionetteComponents.manifest \
+        marionettecomponent.js \
+        $(NULL)
 
 include $(topsrcdir)/config/rules.mk

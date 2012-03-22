@@ -14,7 +14,7 @@ MarionetteLogObj.prototype = {
    *        The logging level to be used
    */
   log: function ML_log(msg, level) {
-    var lev = level ? level : "INFO";
+    let lev = level ? level : "INFO";
     this.logs.push( [lev, msg, (new Date()).toString()]);
   },
 
@@ -24,7 +24,7 @@ MarionetteLogObj.prototype = {
    *        Takes a list of strings
    */
   addLogs: function ML_addLogs(msgs) {
-    for (var i = 0; i < msgs.length; i++) {
+    for (let i = 0; i < msgs.length; i++) {
       this.logs.push(msgs[i]);
     }
   },

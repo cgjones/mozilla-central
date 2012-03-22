@@ -617,11 +617,14 @@ bin/components/@DLL_PREFIX@nkgnomevfs@DLL_SUFFIX@
 @BINPATH@/chrome/chrome@JAREXT@
 @BINPATH@/chrome/chrome.manifest
 @BINPATH@/components/B2GComponents.manifest
-@BINPATH@/components/MarionetteComponents.manifest
-@BINPATH@/components/marionettemodule.js
 @BINPATH@/components/B2GComponents.xpt
 @BINPATH@/components/CameraContent.js
 @BINPATH@/@DLL_PREFIX@omxplugin@DLL_SUFFIX@
 @BINPATH@/components/AlertsService.js
 @BINPATH@/components/ContentPermissionPrompt.js
 @BINPATH@/components/MozKeyboard.js
+@BINPATH@/chrome/marionette@JAREXT@
+@BINPATH@/chrome/marionette.manifest
+@BINPATH@/components/MarionetteComponents.manifest
+@BINPATH@/components/marionettecomponent.js
+

@@ -16,21 +16,21 @@ function Marionette(is_async, window, context, logObj) {
 
 Marionette.prototype = {
   ok: function Marionette__ok(condition, name, diag) {
-    var test = {'result': !!condition, 'name': name, 'diag': diag};
+    let test = {'result': !!condition, 'name': name, 'diag': diag};
     this.logResult(test, "TEST-PASS", "TEST-UNEXPECTED-FAIL");
     this.tests.push(test);
   },
 
   is: function Marionette__is(a, b, name) {
-    var pass = (a == b);
-    var diag = pass ? this.repr(a) + " should equal " + this.repr(b)
+    let pass = (a == b);
+    let diag = pass ? this.repr(a) + " should equal " + this.repr(b)
                     : "got " + this.repr(a) + ", expected " + this.repr(b);
     this.ok(pass, name, diag);
   },
 
   isnot: function Marionette__isnot (a, b, name) {
-    var pass = (a != b);
-    var diag = pass ? this.repr(a) + " should not equal " + this.repr(b)
+    let pass = (a != b);
+    let diag = pass ? this.repr(a) + " should not equal " + this.repr(b)
                     : "didn't expect " + this.repr(a) + ", but got it";
     this.ok(pass, name, diag);
   },
@@ -48,10 +48,10 @@ Marionette.prototype = {
   },
 
   generate_results: function Marionette__generate_results() {
-    var passed = 0;
-    var failed = 0;
-    var failures = [];
-    for (var i in this.tests) {
+    let passed = 0;
+    let failed = 0;
+    let failures = [];
+    for (let i in this.tests) {
       if(this.tests[i].result) {
         passed++;
       }
@@ -70,9 +70,9 @@ Marionette.prototype = {
 
   logResult: function Marionette__logResult(test, passString, failString) {
     //TODO: dump to file
-    var resultString = test.result ? passString : failString;
-    var diagnostic = test.name + (test.diag ? " - " + test.diag : "");
-    var msg = [resultString, diagnostic].join(" | ");
+    let resultString = test.result ? passString : failString;
+    let diagnostic = test.name + (test.diag ? " - " + test.diag : "");
+    let msg = [resultString, diagnostic].join(" | ");
     dump("MARIONETTE TEST RESULT:" + msg + "\n");
   },
 
@@ -99,14 +99,15 @@ Marionette.prototype = {
           }
       } catch (e) {
       }
+      let ostring;
       try {
-          var ostring = (o + "");
+          ostring = (o + "");
       } catch (e) {
           return "[" + typeof(o) + "]";
       }
       if (typeof(o) == "function") {
           o = ostring.replace(/^\s+/, "");
-          var idx = o.indexOf("{");
+          let idx = o.indexOf("{");
           if (idx != -1) {
               o = o.substr(0, idx) + "{...}";
           }
