@@ -55,7 +55,6 @@ MobileConnection.prototype = {
   // nsIObserver
 
   observe: function observe(subject, topic, data) {
-    debug("Observed notification " + topic);
     let radioState = this.mRIL.radioState;
     if (this.cardState != radioState.cardState) {
       this.cardState = radioState.cardState;
@@ -67,7 +66,6 @@ MobileConnection.prototype = {
       if (this[attr] != radioState[attr]) {
         this[attr] = radioState[attr];
         needEvent = true;
-        debug("Radio state (" + attr + ") changed.");
       }
     }
     if (needEvent) {
