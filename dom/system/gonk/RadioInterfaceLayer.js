@@ -1,41 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Telephony.
- *
- * The Initial Developer of the Original Code is
- * the Mozilla Foundation.
- * Portions created by the Initial Developer are Copyright (C) 2011
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Ben Turner <bent.mozilla@gmail.com> (Original Author)
- *   Philipp von Weitershausen <philipp@weitershausen.de>
- *   Sinker Li <thinker@codemud.net>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 "use strict";
 
@@ -288,6 +253,9 @@ RadioInterfaceLayer.prototype = {
         // This one will handle its own notifications.
         this.handleEnumerateCalls(message.calls);
         break;
+      case "callError":
+        this.handleCallError(message);
+        break;
       case "voiceregistrationstatechange":
         this.updateVoiceConnection(message);
         break;
@@ -437,28 +405,29 @@ RadioInterfaceLayer.prototype = {
 
   /**
    * Track the active call and update the audio system as its state changes.
-   *
-   * XXX Needs some more work to support hold/resume.
    */
   _activeCall: null,
   updateCallAudioState: function updateCallAudioState() {
     if (!this._activeCall) {
       // Disable audio.
       gAudioManager.phoneState = nsIAudioManager.PHONE_STATE_NORMAL;
-      debug("No active call, put audio system into PHONE_STATE_NORMAL.");
+      debug("No active call, put audio system into PHONE_STATE_NORMAL: "
+            + gAudioManager.phoneState);
       return;
     }
     switch (this._activeCall.state) {
       case nsIRadioInterfaceLayer.CALL_STATE_INCOMING:
         gAudioManager.phoneState = nsIAudioManager.PHONE_STATE_RINGTONE;
-        debug("Incoming call, put audio system into PHONE_STATE_RINGTONE.");
+        debug("Incoming call, put audio system into PHONE_STATE_RINGTONE: "
+              + gAudioManager.phoneState);
         break;
       case nsIRadioInterfaceLayer.CALL_STATE_DIALING: // Fall through...
       case nsIRadioInterfaceLayer.CALL_STATE_CONNECTED:
         gAudioManager.phoneState = nsIAudioManager.PHONE_STATE_IN_CALL;
         gAudioManager.setForceForUse(nsIAudioManager.USE_COMMUNICATION,
                                      nsIAudioManager.FORCE_NONE);
-        debug("Active call, put audio system into PHONE_STATE_IN_CALL.");
+        debug("Active call, put audio system into PHONE_STATE_IN_CALL: "
+              + gAudioManager.phoneState);
         break;
     }
   },
@@ -470,11 +439,12 @@ RadioInterfaceLayer.prototype = {
   handleCallStateChange: function handleCallStateChange(call) {
     debug("handleCallStateChange: " + JSON.stringify(call));
     call.state = convertRILCallState(call.state);
-    if (call.state == nsIRadioInterfaceLayer.CALL_STATE_DIALING ||
-        call.state == nsIRadioInterfaceLayer.CALL_STATE_ALERTING ||
-        call.state == nsIRadioInterfaceLayer.CALL_STATE_CONNECTED) {
-      // This is now the active call.
+    if (call.isActive) {
       this._activeCall = call;
+    } else if (this._activeCall &&
+               this._activeCall.callIndex == call.callIndex) {
+      // Previously active call is not active now.
+      this._activeCall = null;
     }
     this.updateCallAudioState();
     ppmm.sendAsyncMessage("RIL:CallStateChanged", call);
@@ -485,7 +455,7 @@ RadioInterfaceLayer.prototype = {
    */
   handleCallDisconnected: function handleCallDisconnected(call) {
     debug("handleCallDisconnected: " + JSON.stringify(call));
-    if (this._activeCall && this._activeCall.callIndex == call.callIndex) {
+    if (call.isActive) {
       this._activeCall = null;
     }
     this.updateCallAudioState();
@@ -498,12 +468,17 @@ RadioInterfaceLayer.prototype = {
    */
   handleEnumerateCalls: function handleEnumerateCalls(calls) {
     debug("handleEnumerateCalls: " + JSON.stringify(calls));
-    let activeCallIndex = this._activeCall ? this._activeCall.callIndex : -1;
     for (let i in calls) {
       calls[i].state = convertRILCallState(calls[i].state);
     }
-    ppmm.sendAsyncMessage("RIL:EnumerateCalls",
-                          {calls: calls, activeCallIndex: activeCallIndex});
+    ppmm.sendAsyncMessage("RIL:EnumerateCalls", calls);
+  },
+
+  /**
+   * Handle call error.
+   */
+  handleCallError: function handleCallError(message) {
+    ppmm.sendAsyncMessage("RIL:CallError", message);   
   },
 
   portAddressedSmsApps: null,
@@ -534,7 +509,8 @@ RadioInterfaceLayer.prototype = {
                                            message.sender || null,
                                            message.receiver || null,
                                            message.fullBody || null,
-                                           message.timestamp);
+                                           message.timestamp,
+                                           false);
     Services.obs.notifyObservers(sms, kSmsReceivedObserverTopic, null);
   },
 
@@ -570,7 +546,8 @@ RadioInterfaceLayer.prototype = {
                                            null,
                                            options.number,
                                            options.fullBody,
-                                           timestamp);
+                                           timestamp,
+                                           true);
 
     if (!options.requestStatusReport) {
       // No more used if STATUS-REPORT not requested.
@@ -738,6 +715,10 @@ RadioInterfaceLayer.prototype = {
       nsIAudioManager.PHONE_STATE_IN_COMMUNICATION :
       nsIAudioManager.PHONE_STATE_IN_CALL;  //XXX why is this needed?
     gAudioManager.microphoneMuted = value;
+
+    if (!this._activeCall) {
+      gAudioManager.phoneState = nsIAudioManager.PHONE_STATE_NORMAL;
+    }
   },
 
   get speakerEnabled() {
@@ -752,6 +733,10 @@ RadioInterfaceLayer.prototype = {
     let force = value ? nsIAudioManager.FORCE_SPEAKER :
                         nsIAudioManager.FORCE_NONE;
     gAudioManager.setForceForUse(nsIAudioManager.USE_COMMUNICATION, force);
+
+    if (!this._activeCall) {
+      gAudioManager.phoneState = nsIAudioManager.PHONE_STATE_NORMAL;
+    }
   },
 
   /**

@@ -3,6 +3,10 @@
  *
  * Tests JS_TransplantObject
  */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
 
 #include "tests.h"
 #include "jsobj.h"
@@ -33,6 +37,13 @@ wrap(JSContext *cx, JSObject *toWrap, JSObject *target)
     if (!JS_WrapObject(cx, &wrapper))
         return NULL;
     return wrapper;
+}
+
+static JSObject *
+SameCompartmentWrap(JSContext *cx, JSObject *obj)
+{
+    JS_GC(JS_GetRuntime(cx));
+    return obj;
 }
 
 static JSObject *
@@ -78,7 +89,7 @@ BEGIN_TEST(testBug604087)
         CHECK(next);
     }
 
-    JS_SetWrapObjectCallbacks(JS_GetRuntime(cx), Wrap, PreWrap);
+    JS_SetWrapObjectCallbacks(JS_GetRuntime(cx), Wrap, SameCompartmentWrap, PreWrap);
     CHECK(JS_TransplantObject(cx, outerObj, next));
     return true;
 }

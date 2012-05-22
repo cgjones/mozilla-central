@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Corporation code.
- *
- * The Initial Developer of the Original Code is Mozilla Foundation.
- * Portions created by the Initial Developer are Copyright (C) 2011
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Bas Schouten <bschouten@mozilla.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "base/basictypes.h"
 
@@ -104,7 +72,6 @@
 #include "nsIMemoryReporter.h"
 #include "nsStyleUtil.h"
 #include "CanvasImageCache.h"
-#include "CheckedInt.h"
 
 #include <algorithm>
 
@@ -112,6 +79,7 @@
 #include "jsfriendapi.h"
 
 #include "mozilla/Assertions.h"
+#include "mozilla/CheckedInt.h"
 #include "mozilla/dom/ContentParent.h"
 #include "mozilla/dom/ImageData.h"
 #include "mozilla/dom/PBrowserParent.h"
@@ -700,7 +668,7 @@ protected:
             dash(other.dash),
             dashOffset(other.dashOffset),
             op(other.op),
-            fillRule(FILL_WINDING),
+            fillRule(other.fillRule),
             lineCap(other.lineCap),
             lineJoin(other.lineJoin),
             imageSmoothingEnabled(other.imageSmoothingEnabled)
@@ -4095,14 +4063,14 @@ nsCanvasRenderingContext2DAzure::GetImageDataArray(JSContext* aCx,
   MOZ_ASSERT(aWidth && aHeight);
 
   CheckedInt<uint32_t> len = CheckedInt<uint32_t>(aWidth) * aHeight * 4;
-  if (!len.valid()) {
+  if (!len.isValid()) {
     return NS_ERROR_DOM_INDEX_SIZE_ERR;
   }
 
   CheckedInt<int32_t> rightMost = CheckedInt<int32_t>(aX) + aWidth;
   CheckedInt<int32_t> bottomMost = CheckedInt<int32_t>(aY) + aHeight;
 
-  if (!rightMost.valid() || !bottomMost.valid()) {
+  if (!rightMost.isValid() || !bottomMost.isValid()) {
     return NS_ERROR_DOM_SYNTAX_ERR;
   }
 
@@ -4233,7 +4201,7 @@ nsCanvasRenderingContext2DAzure::PutImageData_explicit(PRInt32 x, PRInt32 y, PRU
 
       CheckedInt32 checkedDirtyX = CheckedInt32(dirtyX) + dirtyWidth;
 
-      if (!checkedDirtyX.valid())
+      if (!checkedDirtyX.isValid())
           return NS_ERROR_DOM_INDEX_SIZE_ERR;
 
       dirtyX = checkedDirtyX.value();
@@ -4245,7 +4213,7 @@ nsCanvasRenderingContext2DAzure::PutImageData_explicit(PRInt32 x, PRInt32 y, PRU
 
       CheckedInt32 checkedDirtyY = CheckedInt32(dirtyY) + dirtyHeight;
 
-      if (!checkedDirtyY.valid())
+      if (!checkedDirtyY.isValid())
           return NS_ERROR_DOM_INDEX_SIZE_ERR;
 
       dirtyY = checkedDirtyY.value();

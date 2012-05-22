@@ -1,3 +1,7 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
 const Cc = Components.classes;
 const Ci = Components.interfaces;
 const Cu = Components.utils;
@@ -13,7 +17,7 @@ function dump(a) {
 function openWindow(aParent, aURL, aTarget, aFeatures, aArgs) {
   let argsArray = Cc["@mozilla.org/supports-array;1"].createInstance(Ci.nsISupportsArray);
   let urlString = null;
-  let restoreSessionBool = Cc["@mozilla.org/supports-PRBool;1"].createInstance(Ci.nsISupportsPRBool);
+  let restoreModeInt = Cc["@mozilla.org/supports-PRInt32;1"].createInstance(Ci.nsISupportsPRInt32);
   let pinnedBool = Cc["@mozilla.org/supports-PRBool;1"].createInstance(Ci.nsISupportsPRBool);
   let widthInt = Cc["@mozilla.org/supports-PRInt32;1"].createInstance(Ci.nsISupportsPRInt32);
   let heightInt = Cc["@mozilla.org/supports-PRInt32;1"].createInstance(Ci.nsISupportsPRInt32);
@@ -22,13 +26,13 @@ function openWindow(aParent, aURL, aTarget, aFeatures, aArgs) {
     urlString = Cc["@mozilla.org/supports-string;1"].createInstance(Ci.nsISupportsString);
     urlString.data = aArgs.url;
   }
-  restoreSessionBool.data = "restoreSession" in aArgs ? aArgs.restoreSession : false;
+  restoreModeInt.data = "restoreMode" in aArgs ? aArgs.restoreMode : 0;
   widthInt.data = "width" in aArgs ? aArgs.width : 1;
   heightInt.data = "height" in aArgs ? aArgs.height : 1;
   pinnedBool.data = "pinned" in aArgs ? aArgs.pinned : false;
 
   argsArray.AppendElement(urlString, false);
-  argsArray.AppendElement(restoreSessionBool, false);
+  argsArray.AppendElement(restoreModeInt, false);
   argsArray.AppendElement(widthInt, false);
   argsArray.AppendElement(heightInt, false);
   argsArray.AppendElement(pinnedBool, false);
@@ -58,7 +62,7 @@ BrowserCLH.prototype = {
     let openURL = "about:home";
     let pinned = false;
 
-    let restoreSession = false;
+    let restoreMode = 0;
     let width = 1;
     let height = 1;
 
@@ -70,7 +74,7 @@ BrowserCLH.prototype = {
     } catch (e) { /* Optional */ }
 
     try {
-      restoreSession = aCmdLine.handleFlag("restoresession", false);
+      restoreMode = aCmdLine.handleFlagWithParam("restoremode", false);
     } catch (e) { /* Optional */ }
     try {
       width = aCmdLine.handleFlagWithParam("width", false);
@@ -91,7 +95,7 @@ BrowserCLH.prototype = {
       } else {
         let args = {
           url: openURL,
-          restoreSession: restoreSession,
+          restoreMode: restoreMode,
           pinned: pinned,
           width: width,
           height: height

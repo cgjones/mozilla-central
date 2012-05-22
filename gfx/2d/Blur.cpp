@@ -1,37 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla gfx.
- *
- * The Initial Developer of the Original Code is Mozilla Foundation.
- * Portions created by the Initial Developer are Copyright (C) 2011
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "mozilla/gfx/Blur.h"
 
@@ -39,7 +8,7 @@
 #include <math.h>
 #include <string.h>
 
-#include "CheckedInt.h"
+#include "mozilla/CheckedInt.h"
 #include "mozilla/Util.h"
 
 #ifndef M_PI
@@ -81,7 +50,7 @@ BoxBlurHorizontal(unsigned char* aInput,
         memcpy(aOutput, aInput, aWidth*aRows);
         return;
     }
-    PRUint32 reciprocal = (PRUint64(1) << 32)/boxSize;
+    uint32_t reciprocal = (uint64_t(1) << 32) / boxSize;
 
     for (int32_t y = 0; y < aRows; y++) {
         // Check whether the skip rect intersects this row. If the skip
@@ -128,7 +97,7 @@ BoxBlurHorizontal(unsigned char* aInput,
             int32_t last = max(tmp, 0);
             int32_t next = min(tmp + boxSize, aWidth - 1);
 
-            aOutput[aWidth * y + x] = (PRUint64(alphaSum)*reciprocal) >> 32;
+            aOutput[aWidth * y + x] = (uint64_t(alphaSum) * reciprocal) >> 32;
 
             alphaSum += aInput[aWidth * y + next] -
                         aInput[aWidth * y + last];
@@ -159,7 +128,7 @@ BoxBlurVertical(unsigned char* aInput,
         memcpy(aOutput, aInput, aWidth*aRows);
         return;
     }
-    PRUint32 reciprocal = (PRUint64(1) << 32)/boxSize;
+    uint32_t reciprocal = (uint64_t(1) << 32) / boxSize;
 
     for (int32_t x = 0; x < aWidth; x++) {
         bool inSkipRectX = x >= aSkipRect.x &&
@@ -199,7 +168,7 @@ BoxBlurVertical(unsigned char* aInput,
             int32_t last = max(tmp, 0);
             int32_t next = min(tmp + boxSize, aRows - 1);
 
-            aOutput[aWidth * y + x] = (PRUint64(alphaSum)*reciprocal) >> 32;
+            aOutput[aWidth * y + x] = (uint64_t(alphaSum) * reciprocal) >> 32;
 
             alphaSum += aInput[aWidth * next + x] -
                         aInput[aWidth * last + x];
@@ -409,12 +378,12 @@ AlphaBoxBlur::AlphaBoxBlur(const Rect& aRect,
   mRect = IntRect(rect.x, rect.y, rect.width, rect.height);
 
   CheckedInt<int32_t> stride = RoundUpToMultipleOf4(mRect.width);
-  if (stride.valid()) {
+  if (stride.isValid()) {
     mStride = stride.value();
 
     CheckedInt<int32_t> size = CheckedInt<int32_t>(mStride) * mRect.height *
                                sizeof(unsigned char);
-    if (size.valid()) {
+    if (size.isValid()) {
       mData = static_cast<unsigned char*>(malloc(size.value()));
       memset(mData, 0, size.value());
     }

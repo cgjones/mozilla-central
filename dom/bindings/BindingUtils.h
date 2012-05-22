@@ -13,9 +13,11 @@
 
 #include "jsapi.h"
 #include "jsfriendapi.h"
+#include "jswrapper.h"
 
-#include "XPCQuickStubs.h"
-#include "XPCWrapper.h"
+#include "nsIXPConnect.h"
+#include "qsObjectHelper.h"
+#include "xpcpublic.h"
 #include "nsTraceRefcnt.h"
 #include "nsWrapperCacheInlines.h"
 
@@ -34,7 +36,7 @@ Throw(JSContext* cx, nsresult rv)
 
   // XXX Introduce exception machinery.
   if (mainThread) {
-    XPCThrower::Throw(rv, cx);
+    xpc::Throw(cx, rv);
   } else {
     if (!JS_IsExceptionPending(cx)) {
       ThrowDOMExceptionForNSResult(cx, rv);
@@ -106,7 +108,7 @@ UnwrapObject(JSContext* cx, JSObject* obj, T** value)
       return NS_ERROR_XPC_BAD_CONVERT_JS;
     }
 
-    obj = XPCWrapper::Unwrap(cx, obj, false);
+    obj = xpc::Unwrap(cx, obj, false);
     if (!obj) {
       return NS_ERROR_XPC_SECURITY_MANAGER_VETO;
     }
@@ -138,18 +140,25 @@ inline bool
 IsArrayLike(JSContext* cx, JSObject* obj)
 {
   MOZ_ASSERT(obj);
-  // For simplicity, check for security wrappers up front
+  // For simplicity, check for security wrappers up front.  In case we
+  // have a security wrapper, don't forget to enter the compartment of
+  // the underlying object after unwrapping.
+  JSAutoEnterCompartment ac;
   if (js::IsWrapper(obj)) {
-    obj = XPCWrapper::Unwrap(cx, obj, false);
+    obj = xpc::Unwrap(cx, obj, false);
     if (!obj) {
       // Let's say it's not
+      return false;
+    }
+
+    if (!ac.enter(cx, obj)) {
       return false;
     }
   }
 
   // XXXbz need to detect platform objects (including listbinding
   // ones) with indexGetters here!
-  return JS_IsArrayObject(cx, obj);
+  return JS_IsArrayObject(cx, obj) || JS_IsTypedArrayObject(obj, cx);
 }
 
 inline bool
@@ -168,7 +177,7 @@ IsPlatformObject(JSContext* cx, JSObject* obj)
   }
   // Now for simplicity check for security wrappers before anything else
   if (js::IsWrapper(obj)) {
-    obj = XPCWrapper::Unwrap(cx, obj, false);
+    obj = xpc::Unwrap(cx, obj, false);
     if (!obj) {
       // Let's say it's not
       return false;
@@ -232,6 +241,12 @@ struct ConstantSpec
   const char* name;
   JS::Value value;
 };
+
+/**
+ * Add constants to an object.
+ */
+bool
+DefineConstants(JSContext* cx, JSObject* obj, ConstantSpec* cs);
 
 /*
  * Create a DOM interface object (if constructorClass is non-null) and/or a
@@ -412,6 +427,47 @@ GetWrapperCache(void* p)
   return NULL;
 }
 
+struct ParentObject {
+  template<class T>
+  ParentObject(T* aObject) :
+    mObject(aObject),
+    mWrapperCache(GetWrapperCache(aObject))
+  {}
+
+  template<class T, template<class> class SmartPtr>
+  ParentObject(const SmartPtr<T>& aObject) :
+    mObject(aObject.get()),
+    mWrapperCache(GetWrapperCache(aObject.get()))
+  {}
+
+  ParentObject(nsISupports* aObject, nsWrapperCache* aCache) :
+    mObject(aObject),
+    mWrapperCache(aCache)
+  {}
+
+  nsISupports* const mObject;
+  nsWrapperCache* const mWrapperCache;
+};
+
+inline nsWrapperCache*
+GetWrapperCache(const ParentObject& aParentObject)
+{
+  return aParentObject.mWrapperCache;
+}
+
+template<class T>
+inline nsISupports*
+GetParentPointer(T* aObject)
+{
+  return aObject;
+}
+
+inline nsISupports*
+GetParentPointer(const ParentObject& aObject)
+{
+  return aObject.mObject;
+}
+
 // Only set allowNativeWrapper to false if you really know you need it, if in
 // doubt use true. Setting it to false disables security wrappers.
 bool
@@ -482,18 +538,18 @@ WrapObject<JSObject>(JSContext* cx, JSObject* scope, JSObject* p, JS::Value* vp)
   return true;
 }
 
-template<class T>
+template<typename T>
 static inline JSObject*
-WrapNativeParent(JSContext* cx, JSObject* scope, T* p)
+WrapNativeParent(JSContext* cx, JSObject* scope, const T& p)
 {
-  if (!p)
+  if (!GetParentPointer(p))
     return scope;
 
   nsWrapperCache* cache = GetWrapperCache(p);
   JSObject* obj;
   if (cache && (obj = cache->GetWrapper())) {
 #ifdef DEBUG
-    qsObjectHelper helper(p, cache);
+    qsObjectHelper helper(GetParentPointer(p), cache);
     JS::Value debugVal;
 
     bool ok = XPCOMObjectToJsval(cx, scope, helper, NULL, false, &debugVal);
@@ -503,7 +559,7 @@ WrapNativeParent(JSContext* cx, JSObject* scope, T* p)
     return obj;
   }
 
-  qsObjectHelper helper(p, cache);
+  qsObjectHelper helper(GetParentPointer(p), cache);
   JS::Value v;
   return XPCOMObjectToJsval(cx, scope, helper, NULL, false, &v) ?
          JSVAL_TO_OBJECT(v) :
@@ -534,6 +590,84 @@ JSBool
 ThrowingConstructor(JSContext* cx, unsigned argc, JS::Value* vp);
 JSBool
 ThrowingConstructorWorkers(JSContext* cx, unsigned argc, JS::Value* vp);
+
+template<class T>
+class NonNull
+{
+public:
+  NonNull()
+#ifdef DEBUG
+    : inited(false)
+#endif
+  {}
+
+  operator T&() {
+    MOZ_ASSERT(inited);
+    MOZ_ASSERT(ptr, "NonNull<T> was set to null");
+    return *ptr;
+  }
+
+  void operator=(T* t) {
+    ptr = t;
+    MOZ_ASSERT(ptr);
+#ifdef DEBUG
+    inited = true;
+#endif
+  }
+
+  T** Slot() {
+#ifdef DEBUG
+    inited = true;
+#endif
+    return &ptr;
+  }
+
+protected:
+  T* ptr;
+#ifdef DEBUG
+  bool inited;
+#endif
+};
+
+template<class T>
+class OwningNonNull
+{
+public:
+  OwningNonNull()
+#ifdef DEBUG
+    : inited(false)
+#endif
+  {}
+
+  operator T&() {
+    MOZ_ASSERT(inited);
+    MOZ_ASSERT(ptr, "OwningNonNull<T> was set to null");
+    return *ptr;
+  }
+
+  void operator=(T* t) {
+    init(t);
+  }
+
+  void operator=(const already_AddRefed<T>& t) {
+    init(t);
+  }
+
+protected:
+  template<typename U>
+  void init(U t) {
+    ptr = t;
+    MOZ_ASSERT(ptr);
+#ifdef DEBUG
+    inited = true;
+#endif
+  }
+
+  nsRefPtr<T> ptr;
+#ifdef DEBUG
+  bool inited;
+#endif
+};
 
 } // namespace dom
 } // namespace mozilla

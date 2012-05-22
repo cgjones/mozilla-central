@@ -1,40 +1,8 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* vim:set ts=2 sw=2 sts=2 et cindent: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla code.
- *
- * The Initial Developer of the Original Code is the Mozilla Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2007
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *  Chris Double <chris.double@double.co.nz>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "mozilla/Util.h"
 
@@ -97,6 +65,9 @@
 #include "MediaStreamGraph.h"
 #include "nsDOMMediaStream.h"
 #include "nsIScriptError.h"
+
+#include "nsCSSParser.h"
+#include "nsIMediaList.h"
 
 #ifdef MOZ_OGG
 #include "nsOggDecoder.h"
@@ -854,6 +825,12 @@ void nsHTMLMediaElement::LoadFromSourceChildren()
                "Should delay load event (if in document) during load");
   NS_ASSERTION(mIsLoadingFromSourceChildren,
                "Must remember we're loading from source children");
+
+  nsIDocument* parentDoc = OwnerDoc()->GetParentDocument();
+  if (parentDoc) {
+    parentDoc->FlushPendingNotifications(Flush_Layout);
+  }
+
   while (true) {
     nsIContent* child = GetNextSource();
     if (!child) {
@@ -880,11 +857,25 @@ void nsHTMLMediaElement::LoadFromSourceChildren()
         GetCanPlay(type) == CANPLAY_NO) {
       DispatchAsyncSourceError(child);
       const PRUnichar* params[] = { type.get(), src.get() };
-      ReportLoadError("MediaLoadUnsupportedType", params, ArrayLength(params));
+      ReportLoadError("MediaLoadUnsupportedTypeAttribute", params, ArrayLength(params));
       continue;
     }
-    LOG(PR_LOG_DEBUG, ("%p Trying load from <source>=%s type=%s", this,
-      NS_ConvertUTF16toUTF8(src).get(), NS_ConvertUTF16toUTF8(type).get()));
+    nsAutoString media;
+    if (child->GetAttr(kNameSpaceID_None, nsGkAtoms::media, media) && !media.IsEmpty()) {
+      nsCSSParser cssParser;
+      nsRefPtr<nsMediaList> mediaList(new nsMediaList());
+      cssParser.ParseMediaList(media, NULL, 0, mediaList, false);
+      nsIPresShell* presShell = OwnerDoc()->GetShell();
+      if (presShell && !mediaList->Matches(presShell->GetPresContext(), NULL)) {
+        DispatchAsyncSourceError(child);
+        const PRUnichar* params[] = { media.get(), src.get() };
+        ReportLoadError("MediaLoadSourceMediaNotMatched", params, ArrayLength(params));
+        continue;
+      }
+    }
+    LOG(PR_LOG_DEBUG, ("%p Trying load from <source>=%s type=%s media=%s", this,
+      NS_ConvertUTF16toUTF8(src).get(), NS_ConvertUTF16toUTF8(type).get(),
+      NS_ConvertUTF16toUTF8(media).get()));
 
     nsCOMPtr<nsIURI> uri;
     NewURIFromString(src, getter_AddRefs(uri));
@@ -2189,6 +2180,10 @@ bool nsHTMLMediaElement::ShouldHandleMediaType(const char* aMIMEType)
 #endif
 #ifdef MOZ_MEDIA_PLUGINS
   if (GetMediaPluginHost()->FindDecoder(nsDependentCString(aMIMEType), NULL))
+    return true;
+#endif
+#ifdef MOZ_GSTREAMER
+  if (IsH264Type(nsDependentCString(aMIMEType)))
     return true;
 #endif
   // We should not return true for Wave types, since there are some

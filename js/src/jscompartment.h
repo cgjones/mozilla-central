@@ -1,41 +1,8 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*-
  *
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is SpiderMonkey code.
- *
- * The Initial Developer of the Original Code is
- * Mozilla Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2010
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either of the GNU General Public License Version 2 or later (the "GPL"),
- * or the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef jscompartment_h___
 #define jscompartment_h___
@@ -112,6 +79,10 @@ namespace JS {
 struct TypeInferenceSizes;
 }
 
+namespace js {
+class AutoDebugModeGC;
+}
+
 struct JSCompartment
 {
     JSRuntime                    *rt;
@@ -119,11 +90,15 @@ struct JSCompartment
 
     js::gc::ArenaLists           arenas;
 
+  private:
     bool                         needsBarrier_;
+  public:
 
     bool needsBarrier() const {
         return needsBarrier_;
     }
+
+    void setNeedsBarrier(bool needs);
 
     js::GCMarker *barrierTracer() {
         JS_ASSERT(needsBarrier_);
@@ -138,6 +113,7 @@ struct JSCompartment
     };
 
     CompartmentGCState           gcState;
+    bool                         gcPreserveCode;
 
   public:
     bool isCollecting() const {
@@ -148,6 +124,10 @@ struct JSCompartment
             JS_ASSERT(gcState != GCRunning);
             return needsBarrier();
         }
+    }
+
+    bool isPreservingCode() const {
+        return gcPreserveCode;
     }
 
     /*
@@ -172,8 +152,18 @@ struct JSCompartment
         gcState = GCScheduled;
     }
 
+    void unscheduleGC() {
+        JS_ASSERT(!rt->gcRunning);
+        JS_ASSERT(gcState != GCRunning);
+        gcState = NoGCScheduled;
+    }
+
     bool isGCScheduled() const {
         return gcState == GCScheduled;
+    }
+
+    void setPreservingCode(bool preserving) {
+        gcPreserveCode = preserving;
     }
 
     size_t                       gcBytes;
@@ -181,6 +171,8 @@ struct JSCompartment
 
     bool                         hold;
     bool                         isSystemCompartment;
+
+    int64_t                      lastCodeRelease;
 
     /*
      * Pool for analysis and intermediate type information in this compartment.
@@ -198,6 +190,9 @@ struct JSCompartment
     void                         *data;
     bool                         active;  // GC flag, whether there are active frames
     js::WrapperMap               crossCompartmentWrappers;
+
+    /* Last time at which an animation was played for a global in this compartment. */
+    int64_t                      lastAnimationTime;
 
     js::RegExpCompartment        regExps;
 
@@ -222,7 +217,7 @@ struct JSCompartment
     js::types::TypeObjectSet     lazyTypeObjects;
     void sweepNewTypeObjectTable(js::types::TypeObjectSet &table);
 
-    js::types::TypeObject        *emptyTypeObject;
+    js::ReadBarriered<js::types::TypeObject> emptyTypeObject;
 
     /* Get the default 'new' type for objects with a NULL prototype. */
     inline js::types::TypeObject *getEmptyType(JSContext *cx);
@@ -332,14 +327,14 @@ struct JSCompartment
 
   private:
     /* This is called only when debugMode() has just toggled. */
-    void updateForDebugMode(js::FreeOp *fop);
+    void updateForDebugMode(js::FreeOp *fop, js::AutoDebugModeGC &dmgc);
 
   public:
     js::GlobalObjectSet &getDebuggees() { return debuggees; }
     bool addDebuggee(JSContext *cx, js::GlobalObject *global);
     void removeDebuggee(js::FreeOp *fop, js::GlobalObject *global,
                         js::GlobalObjectSet::Enum *debuggeesEnum = NULL);
-    bool setDebugModeFromC(JSContext *cx, bool b);
+    bool setDebugModeFromC(JSContext *cx, bool b, js::AutoDebugModeGC &dmgc);
 
     void clearBreakpointsIn(js::FreeOp *fop, js::Debugger *dbg, JSObject *handler);
     void clearTraps(js::FreeOp *fop);
@@ -357,7 +352,28 @@ struct JSCompartment
     js::DebugScriptMap *debugScriptMap;
 };
 
-#define JS_PROPERTY_TREE(cx)    ((cx)->compartment->propertyTree)
+// For use when changing the debug mode flag on one or more compartments.
+// Do not run scripts in any compartment that is scheduled for GC using this
+// object. See comment in updateForDebugMode.
+//
+class js::AutoDebugModeGC
+{
+    JSRuntime *rt;
+    bool needGC;
+  public:
+    explicit AutoDebugModeGC(JSRuntime *rt) : rt(rt), needGC(false) {}
+
+    ~AutoDebugModeGC() {
+        if (needGC)
+            GC(rt, GC_NORMAL, gcreason::DEBUG_MODE_GC);
+    }
+
+    void scheduleGC(JSCompartment *compartment) {
+        JS_ASSERT(!rt->gcRunning);
+        PrepareCompartmentForGC(compartment);
+        needGC = true;
+    }
+};
 
 inline void
 JSContext::setCompartment(JSCompartment *compartment)

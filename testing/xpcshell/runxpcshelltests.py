@@ -1,42 +1,8 @@
 #!/usr/bin/env python
 #
-# ***** BEGIN LICENSE BLOCK *****
-# Version: MPL 1.1/GPL 2.0/LGPL 2.1
-#
-# The contents of this file are subject to the Mozilla Public License Version
-# 1.1 (the "License"); you may not use this file except in compliance with
-# the License. You may obtain a copy of the License at
-# http://www.mozilla.org/MPL/
-#
-# Software distributed under the License is distributed on an "AS IS" basis,
-# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-# for the specific language governing rights and limitations under the
-# License.
-#
-# The Original Code is mozilla.org code.
-#
-# The Initial Developer of the Original Code is The Mozilla Foundation
-# Portions created by the Initial Developer are Copyright (C) 2009
-# the Initial Developer. All Rights Reserved.
-#
-# Contributor(s):
-#  Serge Gautherie <sgautherie.bz@free.fr>
-#  Ted Mielczarek <ted.mielczarek@gmail.com>
-#  Joel Maher <joel.maher@gmail.com>
-#
-# Alternatively, the contents of this file may be used under the terms of
-# either the GNU General Public License Version 2 or later (the "GPL"), or
-# the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-# in which case the provisions of the GPL or the LGPL are applicable instead
-# of those above. If you wish to allow use of your version of this file only
-# under the terms of either the GPL or the LGPL, and not to allow others to
-# use your version of this file under the terms of the MPL, indicate your
-# decision by deleting the provisions above and replace them with the notice
-# and other provisions required by the GPL or the LGPL. If you do not delete
-# the provisions above, a recipient may use your version of this file under
-# the terms of any one of the MPL, the GPL or the LGPL.
-#
-# ***** END LICENSE BLOCK ***** */
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import re, sys, os, os.path, logging, shutil, signal, math, time
 import xml.dom.minidom
@@ -222,10 +188,26 @@ class XPCShellTests(object):
     #   do_load_child_test_harness() in head.js
     if not self.appPath:
         self.appPath = self.xrePath
-    self.xpcsCmd = [self.xpcshell, '-g', self.xrePath, '-a', self.appPath, '-r', self.httpdManifest, '-m', '-n', '-s'] + \
-        ['-e', 'const _HTTPD_JS_PATH = "%s";' % self.httpdJSPath,
-         '-e', 'const _HEAD_JS_PATH = "%s";' % self.headJSPath,
-         '-f', os.path.join(self.testharnessdir, 'head.js')]
+
+    self.xpcsCmd = [
+        self.xpcshell,
+        '-g', self.xrePath,
+        '-a', self.appPath,
+        '-r', self.httpdManifest,
+        '-m',
+        '-n',
+        '-s',
+        '-e', 'const _HTTPD_JS_PATH = "%s";' % self.httpdJSPath,
+        '-e', 'const _HEAD_JS_PATH = "%s";' % self.headJSPath
+    ]
+
+    if self.testingModulesDir:
+        self.xpcsCmd.extend([
+            '-e',
+            'const _TESTING_MODULES_DIR = "%s";' % self.testingModulesDir
+        ])
+
+    self.xpcsCmd.extend(['-f', os.path.join(self.testharnessdir, 'head.js')])
 
     if self.debuggerInfo:
       self.xpcsCmd = [self.debuggerInfo["path"]] + self.debuggerInfo["args"] + self.xpcsCmd
@@ -553,7 +535,7 @@ class XPCShellTests(object):
                debuggerArgs=None, debuggerInteractive=False,
                profileName=None, mozInfo=None, shuffle=False,
                testsRootDir=None, xunitFilename=None, xunitName=None,
-               **otherOptions):
+               testingModulesDir=None, **otherOptions):
     """Run xpcshell tests.
 
     |xpcshell|, is the xpcshell executable to use to run the tests.
@@ -584,6 +566,8 @@ class XPCShellTests(object):
       results.
     |xunitName|, if outputting an xUnit XML file, the str value to use for the
       testsuite name.
+    |testingModulesDir|, if provided, specifies where JS modules reside.
+      xpcshell will register a resource handler mapping this path.
     |otherOptions| may be present for the convenience of subclasses
     """
 
@@ -603,6 +587,10 @@ class XPCShellTests(object):
             raise Exception("testsRootDir path does not exists: %s" %
                     testsRootDir)
 
+    if testingModulesDir:
+        if not os.path.isabs(testingModulesDir):
+            testingModulesDir = os.path.abspath(testingModulesDir)
+
     self.xpcshell = xpcshell
     self.xrePath = xrePath
     self.appPath = appPath
@@ -619,6 +607,7 @@ class XPCShellTests(object):
     self.debuggerInfo = getDebuggerInfo(self.oldcwd, debugger, debuggerArgs, debuggerInteractive)
     self.profileName = profileName or "xpcshell"
     self.mozInfo = mozInfo
+    self.testingModulesDir = testingModulesDir
 
     # If we have an interactive debugger, disable ctrl-c.
     if self.debuggerInfo and self.debuggerInfo["interactive"]:
@@ -877,6 +866,9 @@ class XPCShellOptions(OptionParser):
     self.add_option("--tests-root-dir",
                     type="string", dest="testsRootDir", default=None,
                     help="absolute path to directory where all tests are located. this is typically $(objdir)/_tests")
+    self.add_option("--testing-modules-dir",
+                    dest="testingModulesDir", default=None,
+                    help="Directory where testing modules are located.")
     self.add_option("--total-chunks",
                     type = "int", dest = "totalChunks", default=1,
                     help = "how many chunks to split the tests up into")

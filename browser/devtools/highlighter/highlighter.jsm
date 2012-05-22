@@ -1,46 +1,8 @@
 /* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* vim: set ft=javascript ts=2 et sw=2 tw=80: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Mozilla Highlighter Module.
- *
- * The Initial Developer of the Original Code is
- * The Mozilla Foundation.
- * Portions created by the Initial Developer are Copyright (C) 2010
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Rob Campbell <rcampbell@mozilla.com> (original author)
- *   Mihai Șucan <mihai.sucan@gmail.com>
- *   Julian Viereck <jviereck@mozilla.com>
- *   Paul Rouget <paul@mozilla.com>
- *   Kyle Simpson <ksimpson@mozilla.com>
- *   Johan Charlez <johan.charlez@gmail.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 const Cu = Components.utils;
 const Cc = Components.classes;
@@ -104,7 +66,13 @@ const PSEUDO_CLASSES = [":hover", ":active", ":focus"];
  *   // Is a node highlightable.
  *   boolean isNodeHighlightable(aNode);
  *
- *   // Add/Remove lsiteners
+ *   // Show/hide the veil and the infobar
+ *   void showInfobar();
+ *   void hideInfobar();
+ *   void showVeil();
+ *   void hideVeil();
+ *
+ *   // Add/Remove listeners
  *   // @param aEvent - event name
  *   // @param aListener - function callback
  *   void addListener(aEvent, aListener);
@@ -171,6 +139,7 @@ Highlighter.prototype = {
     // The veil will make the whole page darker except
     // for the region of the selected box.
     this.buildVeil(this.veilContainer);
+    this.showVeil();
 
     this.buildInfobar(controlsBox);
 
@@ -367,6 +336,36 @@ Highlighter.prototype = {
     let nodeName = aNode.nodeName.toLowerCase();
     return !INSPECTOR_INVISIBLE_ELEMENTS[nodeName];
   },
+
+  /**
+   * Hide the veil
+   */
+   hideVeil: function Highlighter_hideVeil() {
+     this.veilContainer.removeAttribute("dim");
+   },
+
+  /**
+   * Show the veil
+   */
+   showVeil: function Highlighter_showVeil() {
+     this.veilContainer.setAttribute("dim", "true");
+   },
+
+   /**
+    * Hide the infobar
+    */
+    hideInfobar: function Highlighter_hideInfobar() {
+      this.nodeInfo.container.setAttribute("hidden", "true");
+    },
+
+   /**
+    * Show the infobar
+    */
+    showInfobar: function Highlighter_showInfobar() {
+      this.nodeInfo.container.removeAttribute("hidden");
+      this.moveInfobar();
+    },
+
   /**
    * Build the veil:
    *
@@ -383,7 +382,6 @@ Highlighter.prototype = {
    * @param nsIDOMElement aParent
    *        The container of the veil boxes.
    */
-
   buildVeil: function Highlighter_buildVeil(aParent)
   {
     // We will need to resize these boxes to surround a node.

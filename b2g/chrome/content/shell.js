@@ -54,7 +54,7 @@ function addPermissions(urls) {
     'indexedDB', 'indexedDB-unlimited', 'webapps-manage', 'offline-app', 'pin-app',
     'websettings-read', 'websettings-readwrite',
     'content-camera', 'webcontacts-manage', 'wifi-manage', 'desktop-notification',
-    'geolocation'
+    'geolocation', 'device-storage'
   ];
   urls.forEach(function(url) {
     url = url.trim();
@@ -624,7 +624,7 @@ SettingsListener.observe('language.current', 'en-US', function(value) {
     power.addWakeLockListener(wakeLockHandler);
   };
 
-  SettingsListener.observe('power.screen.timeout', 30, function(value) {
+  SettingsListener.observe('power.screen.timeout', idleTimeout, function(value) {
     if (!value)
       return;
 
@@ -649,7 +649,7 @@ SettingsListener.observe('language.current', 'en-US', function(value) {
 
   ['ril.data.apn', 'ril.data.user', 'ril.data.passwd'].forEach(function(key) {
     SettingsListener.observe(key, false, function(value) {
-      Services.prefs.setBoolPref(key, value);
+      Services.prefs.setCharPref(key, value);
     });
   });
 })();

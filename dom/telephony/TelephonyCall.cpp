@@ -1,41 +1,8 @@
 /* -*- Mode: c++; c-basic-offset: 2; indent-tabs-mode: nil; tab-width: 40 -*- */
 /* vim: set ts=2 et sw=2 tw=40: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Telephony.
- *
- * The Initial Developer of the Original Code is
- *   The Mozilla Foundation.
- * Portions created by the Initial Developer are Copyright (C) 2011
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Ben Turner <bent.mozilla@gmail.com> (Original Author)
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "TelephonyCall.h"
 
@@ -43,6 +10,7 @@
 
 #include "CallEvent.h"
 #include "Telephony.h"
+#include "DOMError.h"
 
 USING_TELEPHONY_NAMESPACE
 
@@ -62,6 +30,7 @@ TelephonyCall::Create(Telephony* aTelephony, const nsAString& aNumber,
   call->mTelephony = aTelephony;
   call->mNumber = aNumber;
   call->mCallIndex = aCallIndex;
+  call->mError = nsnull;
 
   call->ChangeStateInternal(aCallState, false);
 
@@ -150,6 +119,27 @@ TelephonyCall::ChangeStateInternal(PRUint16 aCallState, bool aFireEvents)
   }
 }
 
+void
+TelephonyCall::NotifyError(const nsAString& aError)
+{
+  // Set the error string
+  NS_ASSERTION(!mError, "Already have an error?");
+
+  mError = DOMError::CreateWithName(aError);
+
+  // Do the state transitions
+  ChangeStateInternal(nsIRadioInterfaceLayer::CALL_STATE_DISCONNECTED, true);
+
+  // Notify the error event
+  nsRefPtr<CallEvent> event = CallEvent::Create(this);
+  NS_ASSERTION(event, "This should never fail!");
+
+  if (NS_FAILED(event->Dispatch(ToIDOMEventTarget(),
+                                NS_LITERAL_STRING("error")))) {
+    NS_WARNING("Failed to dispatch error event!");
+  }
+}
+
 NS_IMPL_CYCLE_COLLECTION_CLASS(TelephonyCall)
 
 NS_IMPL_CYCLE_COLLECTION_TRAVERSE_BEGIN_INHERITED(TelephonyCall,
@@ -167,6 +157,7 @@ NS_IMPL_CYCLE_COLLECTION_TRAVERSE_BEGIN_INHERITED(TelephonyCall,
   NS_CYCLE_COLLECTION_TRAVERSE_EVENT_HANDLER(holding)
   NS_CYCLE_COLLECTION_TRAVERSE_EVENT_HANDLER(held)
   NS_CYCLE_COLLECTION_TRAVERSE_EVENT_HANDLER(resuming)
+  NS_CYCLE_COLLECTION_TRAVERSE_EVENT_HANDLER(error)
 NS_IMPL_CYCLE_COLLECTION_TRAVERSE_END
 
 NS_IMPL_CYCLE_COLLECTION_UNLINK_BEGIN_INHERITED(TelephonyCall,
@@ -183,6 +174,7 @@ NS_IMPL_CYCLE_COLLECTION_UNLINK_BEGIN_INHERITED(TelephonyCall,
   NS_CYCLE_COLLECTION_UNLINK_EVENT_HANDLER(holding)
   NS_CYCLE_COLLECTION_UNLINK_EVENT_HANDLER(held)
   NS_CYCLE_COLLECTION_UNLINK_EVENT_HANDLER(resuming)
+  NS_CYCLE_COLLECTION_UNLINK_EVENT_HANDLER(error)
 NS_IMPL_CYCLE_COLLECTION_UNLINK_END
 
 NS_INTERFACE_MAP_BEGIN_CYCLE_COLLECTION_INHERITED(TelephonyCall)
@@ -206,6 +198,13 @@ NS_IMETHODIMP
 TelephonyCall::GetState(nsAString& aState)
 {
   aState.Assign(mState);
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+TelephonyCall::GetError(nsIDOMDOMError** aError)
+{
+  NS_IF_ADDREF(*aError = mError);
   return NS_OK;
 }
 
@@ -289,3 +288,4 @@ NS_IMPL_EVENT_HANDLER(TelephonyCall, disconnected)
 NS_IMPL_EVENT_HANDLER(TelephonyCall, holding)
 NS_IMPL_EVENT_HANDLER(TelephonyCall, held)
 NS_IMPL_EVENT_HANDLER(TelephonyCall, resuming)
+NS_IMPL_EVENT_HANDLER(TelephonyCall, error)

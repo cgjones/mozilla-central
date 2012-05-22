@@ -1,3 +1,7 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
 #include "tests.h"
 #include "jsobj.h"
 #include "vm/String.h"
@@ -6,7 +10,7 @@ BEGIN_TEST(testConservativeGC)
 {
     jsval v2;
     EVAL("({foo: 'bar'});", &v2);
-    CHECK(JSVAL_IS_OBJECT(v2));
+    CHECK(v2.isObject());
     char objCopy[sizeof(JSObject)];
     js_memcpy(&objCopy, JSVAL_TO_OBJECT(v2), sizeof(JSObject));
 
@@ -18,7 +22,7 @@ BEGIN_TEST(testConservativeGC)
 
     jsval tmp;
     EVAL("({foo2: 'bar2'});", &tmp);
-    CHECK(JSVAL_IS_OBJECT(tmp));
+    CHECK(tmp.isObject());
     JSObject *obj2 = JSVAL_TO_OBJECT(tmp);
     char obj2Copy[sizeof(JSObject)];
     js_memcpy(&obj2Copy, obj2, sizeof(JSObject));

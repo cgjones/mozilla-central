@@ -1,41 +1,8 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 /* vim:set ts=2 sw=2 sts=2 et cindent: */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla code.
- *
- * The Initial Developer of the Original Code is the Mozilla Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2010
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *  Chris Double <chris.double@double.co.nz>
- *  Chris Pearce <chris@pearce.org.nz>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #include "nsDebug.h"
 #include "nsOggCodecState.h"
 #include "nsOggDecoder.h"
@@ -45,6 +12,9 @@
 #include "nsBuiltinDecoderReader.h"
 
 #include "mozilla/StandardInteger.h"
+#include "mozilla/Util.h" // DebugOnly
+
+using namespace mozilla;
 
 #ifdef PR_LOGGING
 extern PRLogModuleInfo* gBuiltinDecoderLog;
@@ -353,10 +323,10 @@ PRInt64 nsTheoraState::Time(th_info* aInfo, PRInt64 aGranulepos)
   ogg_int64_t pframe = aGranulepos - (iframe << shift);
   PRInt64 frameno = iframe + pframe - TH_VERSION_CHECK(aInfo, 3, 2, 1);
   CheckedInt64 t = ((CheckedInt64(frameno) + 1) * USECS_PER_S) * aInfo->fps_denominator;
-  if (!t.valid())
+  if (!t.isValid())
     return -1;
   t /= aInfo->fps_numerator;
-  return t.valid() ? t.value() : -1;
+  return t.isValid() ? t.value() : -1;
 }
 
 PRInt64 nsTheoraState::StartTime(PRInt64 granulepos) {
@@ -364,7 +334,7 @@ PRInt64 nsTheoraState::StartTime(PRInt64 granulepos) {
     return -1;
   }
   CheckedInt64 t = (CheckedInt64(th_granule_frame(mCtx, granulepos)) * USECS_PER_S) * mInfo.fps_denominator;
-  if (!t.valid())
+  if (!t.isValid())
     return -1;
   return t.value() / mInfo.fps_numerator;
 }
@@ -622,7 +592,7 @@ PRInt64 nsVorbisState::Time(vorbis_info* aInfo, PRInt64 aGranulepos)
     return -1;
   }
   CheckedInt64 t = CheckedInt64(aGranulepos) * USECS_PER_S;
-  if (!t.valid())
+  if (!t.isValid())
     t = 0;
   return t.value() / aInfo->rate;
 }
@@ -884,7 +854,7 @@ PRInt64 nsOpusState::Time(PRInt64 granulepos)
 
   // Ogg Opus always runs at a granule rate of 48 kHz.
   CheckedInt64 t = CheckedInt64(granulepos - mPreSkip) * USECS_PER_S;
-  return t.valid() ? t.value() / mRate : -1;
+  return t.isValid() ? t.value() / mRate : -1;
 }
 
 bool nsOpusState::IsHeader(ogg_packet* aPacket)
@@ -921,7 +891,7 @@ nsresult nsOpusState::PageIn(ogg_page* aPage)
 void nsOpusState::ReconstructGranulepos(void)
 {
   NS_ASSERTION(mUnstamped.Length() > 0, "Must have unstamped packets");
-  ogg_packet* last = mUnstamped[mUnstamped.Length()-1];
+  DebugOnly<ogg_packet*> last = mUnstamped[mUnstamped.Length()-1];
   NS_ASSERTION(last->e_o_s || last->granulepos > 0,
       "Must know last granulepos!");
 
@@ -1048,7 +1018,7 @@ bool nsSkeletonState::DecodeIndex(ogg_packet* aPacket)
 
   // Extract the start time.
   CheckedInt64 t = CheckedInt64(LEInt64(p + INDEX_FIRST_NUMER_OFFSET)) * USECS_PER_S;
-  if (!t.valid()) {
+  if (!t.isValid()) {
     return (mActive = false);
   } else {
     startTime = t.value() / timeDenom;
@@ -1056,7 +1026,7 @@ bool nsSkeletonState::DecodeIndex(ogg_packet* aPacket)
 
   // Extract the end time.
   t = LEInt64(p + INDEX_LAST_NUMER_OFFSET) * USECS_PER_S;
-  if (!t.valid()) {
+  if (!t.isValid()) {
     return (mActive = false);
   } else {
     endTime = t.value() / timeDenom;
@@ -1065,7 +1035,7 @@ bool nsSkeletonState::DecodeIndex(ogg_packet* aPacket)
   // Check the numKeyPoints value read, ensure we're not going to run out of
   // memory while trying to decode the index packet.
   CheckedInt64 minPacketSize = (CheckedInt64(numKeyPoints) * MIN_KEY_POINT_SIZE) + INDEX_KEYPOINT_OFFSET;
-  if (!minPacketSize.valid())
+  if (!minPacketSize.isValid())
   {
     return (mActive = false);
   }
@@ -1103,7 +1073,7 @@ bool nsSkeletonState::DecodeIndex(ogg_packet* aPacket)
     p = ReadVariableLengthInt(p, limit, delta);
     offset += delta;
     if (p == limit ||
-        !offset.valid() ||
+        !offset.isValid() ||
         offset.value() > mLength ||
         offset.value() < 0)
     {
@@ -1111,14 +1081,14 @@ bool nsSkeletonState::DecodeIndex(ogg_packet* aPacket)
     }
     p = ReadVariableLengthInt(p, limit, delta);
     time += delta;
-    if (!time.valid() ||
+    if (!time.isValid() ||
         time.value() > endTime ||
         time.value() < startTime)
     {
       return (mActive = false);
     }
     CheckedInt64 timeUsecs = time * USECS_PER_S;
-    if (!timeUsecs.valid())
+    if (!timeUsecs.isValid())
       return mActive = false;
     timeUsecs /= timeDenom;
     keyPoints->Add(offset.value(), timeUsecs.value());
@@ -1228,8 +1198,8 @@ nsresult nsSkeletonState::GetDuration(const nsTArray<PRUint32>& aTracks,
   }
   NS_ASSERTION(endTime > startTime, "Duration must be positive");
   CheckedInt64 duration = CheckedInt64(endTime) - startTime;
-  aDuration = duration.valid() ? duration.value() : 0;
-  return duration.valid() ? NS_OK : NS_ERROR_FAILURE;
+  aDuration = duration.isValid() ? duration.value() : 0;
+  return duration.isValid() ? NS_OK : NS_ERROR_FAILURE;
 }
 
 bool nsSkeletonState::DecodeHeader(ogg_packet* aPacket)
@@ -1260,12 +1230,7 @@ bool nsSkeletonState::DecodeHeader(ogg_packet* aPacket)
     LOG(PR_LOG_DEBUG, ("Skeleton segment length: %lld", mLength));
 
     // Initialize the serianlno-to-index map.
-    bool init = mIndex.Init();
-    if (!init) {
-      NS_WARNING("Failed to initialize Ogg skeleton serialno-to-index map");
-      mActive = false;
-      return mDoneReadingHeaders = true;
-    }
+    mIndex.Init();
     mActive = true;
   } else if (IsSkeletonIndex(aPacket) && mVersion >= SKELETON_VERSION(4,0)) {
     if (!DecodeIndex(aPacket)) {

@@ -1,42 +1,7 @@
 /* -*- Mode: Java; c-basic-offset: 4; tab-width: 4; indent-tabs-mode: nil; -*-
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Mozilla Android code.
- *
- * The Initial Developer of the Original Code is Mozilla Foundation.
- * Portions created by the Initial Developer are Copyright (C) 2009-2010
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Vladimir Vukicevic <vladimir@pobox.com>
- *   Matt Brubeck <mbrubeck@mozilla.com>
- *   Vivien Nicolas <vnicolas@mozilla.com>
- *   Sriram Ramasubramanian <sriram@mozilla.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 package org.mozilla.gecko;
 
@@ -54,7 +19,6 @@ import org.mozilla.gecko.gfx.RectUtils;
 import org.mozilla.gecko.gfx.SurfaceTextureLayer;
 import org.mozilla.gecko.gfx.ViewportMetrics;
 import org.mozilla.gecko.gfx.ImmutableViewportMetrics;
-import org.mozilla.gecko.Tab.HistoryEntry;
 
 import java.io.*;
 import java.util.*;
@@ -118,7 +82,6 @@ abstract public class GeckoApp
     public static final String ACTION_UPDATE        = "org.mozilla.gecko.UPDATE";
     public static final String ACTION_INIT_PW       = "org.mozilla.gecko.INIT_PW";
     public static final String SAVED_STATE_TITLE    = "title";
-    public static final String SAVED_STATE_SESSION  = "session";
 
     StartupMode mStartupMode = null;
     private LinearLayout mMainLayout;
@@ -146,7 +109,7 @@ abstract public class GeckoApp
     private AboutHomeContent mAboutHomeContent;
     private static AbsoluteLayout mPluginContainer;
 
-    private boolean mRestoreSession = false;
+    private int mRestoreMode = GeckoAppShell.RESTORE_NONE;
     private boolean mInitialized = false;
 
     static class ExtraMenuItem implements MenuItem.OnMenuItemClickListener {
@@ -550,7 +513,6 @@ abstract public class GeckoApp
         Tab tab = Tabs.getInstance().getSelectedTab();
         if (tab != null)
             outState.putString(SAVED_STATE_TITLE, tab.getDisplayTitle());
-        outState.putBoolean(SAVED_STATE_SESSION, true);
     }
 
     void getAndProcessThumbnailForTab(final Tab tab) {
@@ -678,6 +640,10 @@ abstract public class GeckoApp
         tab.updateFaviconURL(null);
         tab.updateIdentityData(null);
         tab.removeTransientDoorHangers();
+        tab.setAllowZoom(true);
+        tab.setDefaultZoom(0);
+        tab.setMinZoom(0);
+        tab.setMaxZoom(0);
         tab.setHasTouchListeners(false);
         tab.setCheckerboardColor(Color.WHITE);
 
@@ -1004,6 +970,23 @@ abstract public class GeckoApp
                 }
             } else if (event.equals("Update:Restart")) {
                 doRestart("org.mozilla.gecko.restart_update");
+            } else if (event.equals("Tab:ViewportMetadata")) {
+                int tabId = message.getInt("tabID");
+                Tab tab = Tabs.getInstance().getTab(tabId);
+                if (tab == null)
+                    return;
+                tab.setAllowZoom(message.getBoolean("allowZoom"));
+                tab.setDefaultZoom((float) message.getDouble("defaultZoom"));
+                tab.setMinZoom((float) message.getDouble("minZoom"));
+                tab.setMaxZoom((float) message.getDouble("maxZoom"));
+                // Sync up the LayerController and the tab if the tab's currently displayed.
+                LayerController controller = getLayerController();
+                if (controller != null && Tabs.getInstance().isSelectedTab(tab)) {
+                    controller.setAllowZoom(tab.getAllowZoom());
+                    controller.setDefaultZoom(tab.getDefaultZoom());
+                    controller.setMinZoom(tab.getMinZoom());
+                    controller.setMaxZoom(tab.getMaxZoom());
+                }
             } else if (event.equals("Tab:HasTouchListener")) {
                 int tabId = message.getInt("tabID");
                 Tab tab = Tabs.getInstance().getTab(tabId);
@@ -1061,6 +1044,23 @@ abstract public class GeckoApp
                         AccessibilityManager accessibilityManager =
                             (AccessibilityManager) mAppContext.getSystemService(Context.ACCESSIBILITY_SERVICE);
                         accessibilityManager.sendAccessibilityEvent(accEvent);
+                    }
+                });
+            } else if (event.equals("Accessibility:Ready")) {
+                mMainHandler.post(new Runnable() {
+                    public void run() {
+                        JSONObject ret = new JSONObject();
+                        AccessibilityManager accessibilityManager =
+                            (AccessibilityManager) mAppContext.getSystemService(Context.ACCESSIBILITY_SERVICE);
+                        try {
+                            ret.put("enabled", accessibilityManager.isEnabled());
+                            // XXX: A placeholder for future explore by touch support.
+                            ret.put("exploreByTouch", false);
+                        } catch (Exception ex) {
+                            Log.e(LOGTAG, "Error building JSON arguments for Accessibility:Ready:", ex);
+                        }
+                        GeckoAppShell.sendEventToGecko(GeckoEvent.createBroadcastEvent("Accessibility:Settings",
+                                                                                       ret.toString()));
                     }
                 });
             }
@@ -1281,7 +1281,11 @@ abstract public class GeckoApp
         if (tab == null)
             return;
 
-        Tabs.getInstance().notifyListeners(tab, Tabs.TabEvents.LOADED);
+        mMainHandler.post(new Runnable() {
+            public void run() {
+                Tabs.getInstance().notifyListeners(tab, Tabs.TabEvents.LOADED);
+            }
+        });
     }
 
     void handleTitleChanged(int tabId, String title) {
@@ -1337,11 +1341,12 @@ abstract public class GeckoApp
                 if (layer == null) {
                     layer = new PluginLayer(view, rect, mLayerController.getView().getRenderer().getMaxTextureSize());
                     tab.addPluginLayer(view, layer);
-                    mLayerController.getView().addLayer(layer);
                 } else {
                     layer.reset(rect);
                     layer.setVisible(true);
                 }
+
+                mLayerController.getView().addLayer(layer);
             }
         });
     }
@@ -1509,6 +1514,14 @@ abstract public class GeckoApp
 
         mAppContext = this;
 
+        // Check to see if the activity is restarted after configuration change.
+        if (getLastNonConfigurationInstance() != null) {
+            // Restart the application as a safe way to handle the configuration change.
+            doRestart();
+            System.exit(0);
+            return;
+        }
+
         // StrictMode is set by defaults resource flag |enableStrictMode|.
         if (getResources().getBoolean(R.bool.enableStrictMode)) {
             enableStrictMode();
@@ -1542,7 +1555,7 @@ abstract public class GeckoApp
 
         if (savedInstanceState != null) {
             mBrowserToolbar.setTitle(savedInstanceState.getString(SAVED_STATE_TITLE));
-            mRestoreSession = savedInstanceState.getBoolean(SAVED_STATE_SESSION);
+            mRestoreMode = GeckoAppShell.RESTORE_OOM;
         }
 
         ((GeckoApplication) getApplication()).addApplicationLifecycleCallbacks(this);
@@ -1575,12 +1588,13 @@ abstract public class GeckoApp
             mBrowserToolbar.setTitle(uri);
         }
 
-        mRestoreSession |= getProfile().shouldRestoreSession();
+        if (mRestoreMode == GeckoAppShell.RESTORE_NONE && getProfile().shouldRestoreSession())
+            mRestoreMode = GeckoAppShell.RESTORE_CRASH;
 
         boolean isExternalURL = passedUri != null && !passedUri.equals("about:home");
         if (!isExternalURL) {
             // show about:home if we aren't restoring previous session
-            if (!mRestoreSession) {
+            if (mRestoreMode == GeckoAppShell.RESTORE_NONE) {
                 mBrowserToolbar.updateTabCount(1);
                 showAboutHome();
             }
@@ -1588,7 +1602,7 @@ abstract public class GeckoApp
             mBrowserToolbar.updateTabCount(1);
         }
 
-        mBrowserToolbar.setProgressVisibility(isExternalURL || mRestoreSession);
+        mBrowserToolbar.setProgressVisibility(isExternalURL || (mRestoreMode != GeckoAppShell.RESTORE_NONE));
 
         // Start migrating as early as possible, can do this in
         // parallel with Gecko load.
@@ -1608,7 +1622,7 @@ abstract public class GeckoApp
             passedUri = "about:empty";
         }
 
-        sGeckoThread = new GeckoThread(intent, passedUri, mRestoreSession);
+        sGeckoThread = new GeckoThread(intent, passedUri, mRestoreMode);
         if (!ACTION_DEBUG.equals(action) &&
             checkAndSetLaunchState(LaunchState.Launching, LaunchState.Launched)) {
             sGeckoThread.start();
@@ -1692,9 +1706,11 @@ abstract public class GeckoApp
         GeckoAppShell.registerGeckoEventListener("CharEncoding:State", GeckoApp.mAppContext);
         GeckoAppShell.registerGeckoEventListener("Update:Restart", GeckoApp.mAppContext);
         GeckoAppShell.registerGeckoEventListener("Tab:HasTouchListener", GeckoApp.mAppContext);
+        GeckoAppShell.registerGeckoEventListener("Tab:ViewportMetadata", GeckoApp.mAppContext);
         GeckoAppShell.registerGeckoEventListener("Session:StatePurged", GeckoApp.mAppContext);
         GeckoAppShell.registerGeckoEventListener("Bookmark:Insert", GeckoApp.mAppContext);
         GeckoAppShell.registerGeckoEventListener("Accessibility:Event", GeckoApp.mAppContext);
+        GeckoAppShell.registerGeckoEventListener("Accessibility:Ready", GeckoApp.mAppContext);
 
         if (SmsManager.getInstance() != null) {
           SmsManager.getInstance().start();
@@ -2039,6 +2055,8 @@ abstract public class GeckoApp
         GeckoAppShell.unregisterGeckoEventListener("Tab:HasTouchListener", GeckoApp.mAppContext);
         GeckoAppShell.unregisterGeckoEventListener("Session:StatePurged", GeckoApp.mAppContext);
         GeckoAppShell.unregisterGeckoEventListener("Bookmark:Insert", GeckoApp.mAppContext);
+        GeckoAppShell.unregisterGeckoEventListener("Accessibility:Event", GeckoApp.mAppContext);
+        GeckoAppShell.unregisterGeckoEventListener("Accessibility:Ready", GeckoApp.mAppContext);
 
         if (mFavicons != null)
             mFavicons.close();
@@ -2116,6 +2134,13 @@ abstract public class GeckoApp
         GeckoNetworkManager.getInstance().start();
         GeckoScreenOrientationListener.getInstance().start();
     }
+
+    @Override
+    public Object onRetainNonConfigurationInstance() {
+        // Send a non-null value so that we can restart the application, 
+        // when activity restarts due to configuration change.
+        return new Boolean(true);
+    } 
 
     abstract public String getPackageName();
     abstract public String getContentProcessName();

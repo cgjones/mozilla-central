@@ -1,39 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Android SUTAgent code.
- *
- * The Initial Developer of the Original Code is
- * Bob Moss.
- * Portions created by the Initial Developer are Copyright (C) 2010
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *  Bob Moss <bmoss@mozilla.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 package com.mozilla.SUTAgentAndroid.service;
 
@@ -1327,7 +1294,6 @@ private void CancelNotification()
         {
         String    sRet = sErrorPrefix + sDir + " does not exist";
         String    tmpDir    = fixFileName(sDir);
-        String [] theArgs = new String [3];
         int    nFiles = 0;
 
         if (tmpDir.contains("org.mozilla.fennec") || tmpDir.contains("org.mozilla.firefox")) {
@@ -1365,11 +1331,7 @@ private void CancelNotification()
             }
             else {
                 try {
-                    theArgs[0] = "su";
-                    theArgs[1] = "-c";
-                    theArgs[2] = "ls -l " + sDir;
-
-                    pProc = Runtime.getRuntime().exec(theArgs);
+                    pProc = Runtime.getRuntime().exec(this.getSuArgs("ls -l " + sDir));
                     RedirOutputThread outThrd = new RedirOutputThread(pProc, null);
                     outThrd.start();
                     outThrd.join(5000);
@@ -2335,35 +2297,30 @@ private void CancelNotification()
     public String SetADB(String sWhat) {
         String sRet = "";
         String sTmp = "";
-        String [] theArgs = new String [3];
-
-        theArgs[0] = "su";
-        theArgs[1] = "-c";
+        String sCmd;
 
         if (sWhat.contains("ip")) {
-            theArgs[2] = "setprop service.adb.tcp.port 5555";
+            sCmd = "setprop service.adb.tcp.port 5555";
         } else {
-            theArgs[2] = "setprop service.adb.tcp.port -1";
+            sCmd = "setprop service.adb.tcp.port -1";
         }
 
         try {
-            pProc = Runtime.getRuntime().exec(theArgs);
+            pProc = Runtime.getRuntime().exec(this.getSuArgs(sCmd));
             RedirOutputThread outThrd = new RedirOutputThread(pProc, null);
             outThrd.start();
             outThrd.join(5000);
             sTmp = outThrd.strOutput;
             Log.e("ADB", sTmp);
             if (outThrd.nExitCode == 0) {
-                theArgs[2] = "stop adbd";
-                pProc = Runtime.getRuntime().exec(theArgs);
+                pProc = Runtime.getRuntime().exec(this.getSuArgs("stop adbd"));
                 outThrd = new RedirOutputThread(pProc, null);
                 outThrd.start();
                 outThrd.join(5000);
                 sTmp = outThrd.strOutput;
                 Log.e("ADB", sTmp);
                 if (outThrd.nExitCode == 0) {
-                    theArgs[2] = "start adbd";
-                    pProc = Runtime.getRuntime().exec(theArgs);
+                    pProc = Runtime.getRuntime().exec(this.getSuArgs("start adbd"));
                     outThrd = new RedirOutputThread(pProc, null);
                     outThrd.start();
                     outThrd.join(5000);
@@ -2397,11 +2354,7 @@ private void CancelNotification()
     public String KillProcess(String sProcName, OutputStream out)
         {
         String sTmp = "";
-        String [] theArgs = new String [3];
-
-        theArgs[0] = "su";
-        theArgs[1] = "-c";
-        theArgs[2] = "kill";
+        String sCmd = "kill";
 
         String sRet = sErrorPrefix + "Unable to kill " + sProcName + "\n";
         ActivityManager aMgr = (ActivityManager) contextWrapper.getSystemService(Activity.ACTIVITY_SERVICE);
@@ -2422,11 +2375,11 @@ private void CancelNotification()
                 nPID = lProcesses.get(lcv).pid;
                 sRet = sErrorPrefix + "Failed to kill " + nPID + " " + strProcName + "\n";
 
-                theArgs[2] += " " + nPID;
+                sCmd += " " + nPID;
 
                 try
                     {
-                    pProc = Runtime.getRuntime().exec(theArgs);
+                    pProc = Runtime.getRuntime().exec(this.getSuArgs(sCmd));
                     RedirOutputThread outThrd = new RedirOutputThread(pProc, null);
                     outThrd.start();
                     outThrd.join(15000);
@@ -2857,10 +2810,6 @@ private void CancelNotification()
         String sRet = "";
         String sM = "";
         String sMillis = "";
-        String [] theArgs = new String [3];
-
-        theArgs[0] = "su";
-        theArgs[1] = "-c";
 
         if (((sDate != null) && (sTime != null)) &&
             (sDate.contains("/") || sDate.contains(".")) &&
@@ -2886,10 +2835,8 @@ private void CancelNotification()
 
         // if we have an argument
         if (sMillis.length() > 0) {
-            theArgs[2] = "date -u " + sMillis;
-
             try {
-                pProc = Runtime.getRuntime().exec(theArgs);
+                pProc = Runtime.getRuntime().exec(this.getSuArgs("date -u " + sMillis));
                 RedirOutputThread outThrd = new RedirOutputThread(pProc, null);
                 outThrd.start();
                 outThrd.join(10000);
@@ -3123,11 +3070,7 @@ private void CancelNotification()
         {
         String sRet = "";
         Context ctx = contextWrapper.getApplicationContext();
-        String [] theArgs = new String [3];
 
-        theArgs[0] = "su";
-        theArgs[1] = "-c";
-        theArgs[2] = "reboot";
         try {
             if ((sCallBackIP != null) && (sCallBackPort != null) &&
                 (sCallBackIP.length() > 0) && (sCallBackPort.length() > 0))    {
@@ -3150,7 +3093,7 @@ private void CancelNotification()
             // Tell all of the data channels we are rebooting
             ((ASMozStub)this.contextWrapper).SendToDataChannel("Rebooting ...");
 
-            pProc = Runtime.getRuntime().exec(theArgs);
+            pProc = Runtime.getRuntime().exec(this.getSuArgs("reboot"));
             RedirOutputThread outThrd = new RedirOutputThread(pProc, out);
             outThrd.start();
             outThrd.join(10000);
@@ -3164,18 +3107,24 @@ private void CancelNotification()
         return (sRet);
         }
 
+    private String [] getSuArgs(String cmdString)
+        {
+        String [] theArgs = new String [3];
+        theArgs[0] = "su";
+        theArgs[1] = "-c";
+        // as a security measure, ICS and later resets LD_LIBRARY_PATH. reset
+        // it here when executing the command
+        theArgs[2] = "LD_LIBRARY_PATH=/vendor/lib:/system/lib " + cmdString;
+        return theArgs;
+        }
+
     public String UnInstallApp(String sApp, OutputStream out)
         {
         String sRet = "";
-        String [] theArgs = new String [3];
-
-        theArgs[0] = "su";
-        theArgs[1] = "-c";
-        theArgs[2] = "pm uninstall " + sApp + ";reboot;exit";
 
         try
             {
-            pProc = Runtime.getRuntime().exec(theArgs);
+            pProc = Runtime.getRuntime().exec(this.getSuArgs("pm uninstall " + sApp + ";reboot;exit"));
 
             RedirOutputThread outThrd = new RedirOutputThread(pProc, out);
             outThrd.start();
@@ -3205,12 +3154,7 @@ private void CancelNotification()
     public String InstallApp(String sApp, OutputStream out)
         {
         String sRet = "";
-        String [] theArgs = new String [3];
         File    srcFile = new File(sApp);
-
-        theArgs[0] = "su";
-        theArgs[1] = "-c";
-        theArgs[2] = "mv " + GetTmpDir() + "/" + srcFile.getName() + " /data/local/tmp/" + srcFile.getName() + ";exit";
 
         sRet = CopyFile(sApp, GetTmpDir() + "/" + srcFile.getName());
         try {
@@ -3224,7 +3168,10 @@ private void CancelNotification()
 
         try
             {
-            pProc = Runtime.getRuntime().exec(theArgs);
+            pProc = Runtime.getRuntime().exec(this.getSuArgs("mv " + GetTmpDir() + "/" +
+                                                             srcFile.getName() +
+                                                             " /data/local/tmp/" +
+                                                             srcFile.getName() + ";exit"));
 
             RedirOutputThread outThrd = new RedirOutputThread(pProc, out);
             outThrd.start();
@@ -3247,8 +3194,8 @@ private void CancelNotification()
                 e1.printStackTrace();
                 }
 
-            theArgs[2] = "chmod 666 /data/local/tmp/" + srcFile.getName() + ";exit";
-            pProc = Runtime.getRuntime().exec(theArgs);
+            pProc = Runtime.getRuntime().exec(this.getSuArgs("chmod 666 /data/local/tmp/" +
+                                                             srcFile.getName() + ";exit"));
             RedirOutputThread outThrd2 = new RedirOutputThread(pProc, out);
             outThrd2.start();
             try {
@@ -3269,8 +3216,9 @@ private void CancelNotification()
                 e1.printStackTrace();
                 }
 
-            theArgs[2] = "pm install -r /data/local/tmp/" + srcFile.getName() + " Cleanup" + ";exit";
-            pProc = Runtime.getRuntime().exec(theArgs);
+            pProc = Runtime.getRuntime().exec(this.getSuArgs("pm install -r /data/local/tmp/" +
+                                                             srcFile.getName() + " Cleanup" +
+                                                             ";exit"));
             RedirOutputThread outThrd3 = new RedirOutputThread(pProc, out);
             outThrd3.start();
             try {
@@ -3291,8 +3239,8 @@ private void CancelNotification()
                 e1.printStackTrace();
                 }
 
-            theArgs[2] = "rm /data/local/tmp/" + srcFile.getName() + ";exit";
-            pProc = Runtime.getRuntime().exec(theArgs);
+            pProc = Runtime.getRuntime().exec(this.getSuArgs("rm /data/local/tmp/" +
+                                                             srcFile.getName() + ";exit"));
             RedirOutputThread outThrd4 = new RedirOutputThread(pProc, out);
             outThrd4.start();
             try {

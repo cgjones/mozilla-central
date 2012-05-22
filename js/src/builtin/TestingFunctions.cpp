@@ -10,10 +10,13 @@
 #include "jsfriendapi.h"
 #include "jsgc.h"
 #include "jsobj.h"
+#include "jsobjinlines.h"
 #include "jsprf.h"
 #include "jswrapper.h"
 
 #include "methodjit/MethodJIT.h"
+
+#include "vm/Stack-inl.h"
 
 using namespace js;
 using namespace JS;
@@ -141,6 +144,22 @@ GCParameter(JSContext *cx, unsigned argc, jsval *vp)
 }
 
 static JSBool
+IsProxy(JSContext *cx, unsigned argc, jsval *vp)
+{
+    CallArgs args = CallArgsFromVp(argc, vp);
+    if (argc != 1) {
+        JS_ReportError(cx, "the function takes exactly one argument");
+        return false;
+    }
+    if (!args[0].isObject()) {
+        args.rval().setBoolean(false);
+        return true;
+    }
+    args.rval().setBoolean(args[0].toObject().isProxy());
+    return true;
+}
+
+static JSBool
 InternalConst(JSContext *cx, unsigned argc, jsval *vp)
 {
     if (argc != 1) {
@@ -258,6 +277,20 @@ GCSlice(JSContext *cx, unsigned argc, jsval *vp)
     }
 
     GCDebugSlice(cx->runtime, limit, budget);
+    *vp = JSVAL_VOID;
+    return JS_TRUE;
+}
+
+static JSBool
+GCPreserveCode(JSContext *cx, unsigned argc, jsval *vp)
+{
+    if (argc != 0) {
+        ReportUsageError(cx, &JS_CALLEE(cx, vp).toObject(), "Wrong number of arguments");
+        return JS_FALSE;
+    }
+
+    cx->runtime->alwaysPreserveCode = true;
+
     *vp = JSVAL_VOID;
     return JS_TRUE;
 }
@@ -553,6 +586,10 @@ static JSFunctionSpecWithHelp TestingFunctions[] = {
 "gcslice(n)",
 "  Run an incremental GC slice that marks about n objects."),
 
+    JS_FN_HELP("gcPreserveCode", GCPreserveCode, 0, 0,
+"gcPreserveCode()",
+"  Preserve JIT code during garbage collections."),
+
     JS_FN_HELP("deterministicgc", DeterministicGC, 1, 0,
 "deterministicgc(true|false)",
 "  If true, only allow determinstic GCs to run."),
@@ -562,6 +599,10 @@ static JSFunctionSpecWithHelp TestingFunctions[] = {
 "internalConst(name)",
 "  Query an internal constant for the engine. See InternalConst source for\n"
 "  the list of constant names."),
+
+    JS_FN_HELP("isProxy", IsProxy, 1, 0,
+"isProxy(obj)",
+"  If true, obj is a proxy of some sort"),
 
     JS_FN_HELP("mjitChunkLimit", MJitChunkLimit, 1, 0,
 "mjitChunkLimit(N)",

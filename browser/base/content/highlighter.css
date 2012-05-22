@@ -12,6 +12,11 @@
   overflow: hidden;
 }
 
+#highlighter-veil-container:not([dim]) > .highlighter-veil,
+#highlighter-veil-container:not([dim]) > hbox > .highlighter-veil {
+  visibility: hidden;
+}
+
 #highlighter-veil-container:not([disable-transitions]) > .highlighter-veil,
 #highlighter-veil-container:not([disable-transitions]) > #highlighter-veil-middlebox,
 #highlighter-veil-container:not([disable-transitions]) > #highlighter-veil-middlebox > .highlighter-veil,
@@ -101,11 +106,18 @@ html|*#highlighter-nodeinfobar-tagname {
   display: none;
 }
 
+#inspector-option-toolbarbutton > .toolbarbutton-menu-dropmarker {
+  display: none;
+}
+
 #inspector-layoutview-container > iframe {
-  -moz-transition-property: height;
-  -moz-transition-duration: 0.1s;
   /* header size */
   height: 22px;
+}
+
+#inspector-layoutview-container:not([disable-transitions]) > iframe {
+  -moz-transition-property: height;
+  -moz-transition-duration: 0.2s;
 }
 
 #inspector-layoutview-container > iframe[open] {

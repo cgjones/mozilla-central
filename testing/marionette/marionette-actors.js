@@ -3,31 +3,33 @@
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 "use strict";
+
 /**
  * Gecko-specific actors.
  */
 
-let Ci = Components.interfaces;
-let Cc = Components.classes;
-let Cu = Components.utils;
+let {classes: Cc, interfaces: Ci, utils: Cu, results: Cr} = Components;
 
 let loader = Cc["@mozilla.org/moz/jssubscript-loader;1"]
-             .getService(Ci.mozIJSSubScriptLoader);
+               .getService(Ci.mozIJSSubScriptLoader);
 loader.loadSubScript("chrome://marionette/content/marionette-simpletest.js");
 loader.loadSubScript("chrome://marionette/content/marionette-log-obj.js");
 Cu.import("chrome://marionette/content/marionette-elements.js");
 let utils = {};
 loader.loadSubScript("chrome://marionette/content/EventUtils.js", utils);
 loader.loadSubScript("chrome://marionette/content/ChromeUtils.js", utils);
-
-let prefs = Cc["@mozilla.org/preferences-service;1"]
-            .getService(Ci.nsIPrefBranch);
-prefs.setBoolPref("marionette.contentListener", false);
-
-let xulAppInfo = Cc["@mozilla.org/xre/app-info;1"]
-                 .getService(Ci.nsIXULAppInfo);
-let appName = xulAppInfo.name;
 loader.loadSubScript("chrome://marionette/content/atoms.js", utils);
+
+let specialpowers = {};
+loader.loadSubScript("chrome://specialpowers/content/SpecialPowersObserver.js",
+                     specialpowers);
+specialpowers.specialPowersObserver = new specialpowers.SpecialPowersObserver();
+specialpowers.specialPowersObserver.init();
+
+Cu.import("resource://gre/modules/Services.jsm");
+
+Services.prefs.setBoolPref("marionette.contentListener", false);
+let appName = Services.appinfo.name;
 
 // import logger
 Cu.import("resource://gre/modules/services-common/log4moz.js");
@@ -106,12 +108,11 @@ MarionetteRootActor.prototype.requestTypes = {
 function MarionetteDriverActor(aConnection)
 {
   this.uuidGen = Cc["@mozilla.org/uuid-generator;1"]
-                 .getService(Ci.nsIUUIDGenerator);
+                   .getService(Ci.nsIUUIDGenerator);
 
   this.conn = aConnection;
-  this.messageManager = Cc["@mozilla.org/globalmessagemanager;1"].
-                             getService(Ci.nsIChromeFrameMessageManager);
-  this.windowMediator = Cc['@mozilla.org/appshell/window-mediator;1'].getService(Ci.nsIWindowMediator);
+  this.messageManager = Cc["@mozilla.org/globalmessagemanager;1"]
+                          .getService(Ci.nsIChromeFrameMessageManager);
   this.browsers = {}; //holds list of BrowserObjs
   this.curBrowser = null; // points to current browser
   this.context = "content";
@@ -130,6 +131,7 @@ function MarionetteDriverActor(aConnection)
   this.messageManager.addMessageListener("Marionette:testLog", this);
   this.messageManager.addMessageListener("Marionette:register", this);
   this.messageManager.addMessageListener("Marionette:goUrl", this);
+  this.messageManager.addMessageListener("Marionette:runEmulatorCmd", this);
 }
 
 MarionetteDriverActor.prototype = {
@@ -164,8 +166,13 @@ MarionetteDriverActor.prototype = {
    */
   sendToClient: function MDA_sendToClient(msg, command_id) {
     logger.info("sendToClient: " + JSON.stringify(msg) + ", " + command_id + ", " + this.command_id);
-    if (command_id == undefined || command_id == this.command_id) {
-      this.conn.send(msg);
+    if (this.command_id != null &&
+        command_id != null &&
+        this.command_id != command_id) {
+      return;
+    }
+    this.conn.send(msg);
+    if (command_id != null) {
       this.command_id = null;
     }
   },
@@ -225,7 +232,7 @@ MarionetteDriverActor.prototype = {
       if (appName != "B2G" && this.context == "content") {
         type = 'navigator:browser';
       }
-      return this.windowMediator.getMostRecentWindow(type);
+      return Services.wm.getMostRecentWindow(type);
     }
     else {
       return this.curFrame;
@@ -242,7 +249,7 @@ MarionetteDriverActor.prototype = {
     if (appName != "B2G" && this.context == "content") {
       type = 'navigator:browser';
     }
-    return this.windowMediator.getEnumerator(type);
+    return Services.wm.getEnumerator(type);
   },
 
   /**
@@ -266,7 +273,6 @@ MarionetteDriverActor.prototype = {
       this.curBrowser.elementManager.seenItems[winId] = win;
     }
     this.browsers[winId] = browser;
-    return winId;
   },
 
   /**
@@ -288,7 +294,9 @@ MarionetteDriverActor.prototype = {
     this.curBrowser.newSession = newSession;
     this.curBrowser.startSession(newSession);
     try {
-      this.curBrowser.loadFrameScript("chrome://marionette/content/marionette-listener.js", win);
+      if (!Services.prefs.getBoolPref("marionette.contentListener") || !newSession) {
+        this.curBrowser.loadFrameScript("chrome://marionette/content/marionette-listener.js", win);
+      }
     }
     catch (e) {
       //there may not always be a content process
@@ -336,8 +344,20 @@ MarionetteDriverActor.prototype = {
    *
    */
   newSession: function MDA_newSession() {
-    if (!prefs.getBoolPref("marionette.contentListener")) {
-      this.startBrowser(this.getCurrentWindow(), true);
+
+    function waitForWindow() {
+      let checkTimer = Cc["@mozilla.org/timer;1"].createInstance(Ci.nsITimer);
+      let win = this.getCurrentWindow();
+      if (!win || (appName != "B2G" && !win.gBrowser)) { 
+        checkTimer.initWithCallback(waitForWindow.bind(this), 100, Ci.nsITimer.TYPE_ONE_SHOT);
+      }
+      else {
+        this.startBrowser(win, true);
+      }
+    }
+
+    if (!Services.prefs.getBoolPref("marionette.contentListener")) {
+      waitForWindow.call(this);
     }
     else if ((appName == "B2G") && (this.curBrowser == null)) {
       //if there is a content listener, then we just wake it up
@@ -417,6 +437,13 @@ MarionetteDriverActor.prototype = {
       _chromeSandbox[fn] = marionette[fn].bind(marionette);
     });
 
+    loader.loadSubScript("chrome://specialpowers/content/specialpowersAPI.js",
+                         _chromeSandbox);
+    loader.loadSubScript("chrome://specialpowers/content/SpecialPowersObserverAPI.js",
+                         _chromeSandbox);
+    loader.loadSubScript("chrome://specialpowers/content/ChromePowers.js",
+                         _chromeSandbox);
+
     return _chromeSandbox;
   },
 
@@ -472,13 +499,21 @@ MarionetteDriverActor.prototype = {
    *        function body
    */
   execute: function MDA_execute(aRequest, directInject) {
+    logger.info("newSandbox: " + aRequest.newSandbox);
+    if (aRequest.newSandbox == undefined) {
+      //if client does not send a value in newSandbox, 
+      //then they expect the same behaviour as webdriver
+      aRequest.newSandbox = true;
+    }
     if (this.context == "content") {
-      this.sendAsync("executeScript", {value: aRequest.value, args: aRequest.args});
+      this.sendAsync("executeScript", {value: aRequest.value,
+                                       args: aRequest.args,
+                                       newSandbox:aRequest.newSandbox});
       return;
     }
 
     let curWindow = this.getCurrentWindow();
-    let marionette = new Marionette(false, curWindow, "chrome", this.marionetteLog);
+    let marionette = new Marionette(this, curWindow, "chrome", this.marionetteLog);
     let _chromeSandbox = this.createExecuteSandbox(curWindow, marionette, aRequest.args);
     if (!_chromeSandbox)
       return;
@@ -533,6 +568,11 @@ MarionetteDriverActor.prototype = {
    */
   executeJSScript: function MDA_executeJSScript(aRequest) {
     //all pure JS scripts will need to call Marionette.finish() to complete the test.
+    if (aRequest.newSandbox == undefined) {
+      //if client does not send a value in newSandbox, 
+      //then they expect the same behaviour as webdriver
+      aRequest.newSandbox = true;
+    }
     if (this.context == "chrome") {
       if (aRequest.timeout) {
         this.executeWithCallback(aRequest, aRequest.timeout);
@@ -562,19 +602,25 @@ MarionetteDriverActor.prototype = {
    *        function body
    */
   executeWithCallback: function MDA_executeWithCallback(aRequest, directInject) {
+    if (aRequest.newSandbox == undefined) {
+      //if client does not send a value in newSandbox, 
+      //then they expect the same behaviour as webdriver
+      aRequest.newSandbox = true;
+    }
     this.command_id = this.uuidGen.generateUUID().toString();
 
     if (this.context == "content") {
       this.sendAsync("executeAsyncScript", {value: aRequest.value,
                                             args: aRequest.args,
-                                            id: this.command_id});
+                                            id: this.command_id,
+                                            newSandbox: aRequest.newSandbox});
       return;
     }
 
     let curWindow = this.getCurrentWindow();
     let original_onerror = curWindow.onerror;
     let that = this;
-    let marionette = new Marionette(true, curWindow, "chrome", this.marionetteLog);
+    let marionette = new Marionette(this, curWindow, "chrome", this.marionetteLog);
     marionette.command_id = this.command_id;
 
     function chromeAsyncReturnFunc(value, status) {
@@ -649,11 +695,21 @@ MarionetteDriverActor.prototype = {
    *        'value' member holds the url to navigate to
    */
   goUrl: function MDA_goUrl(aRequest) {
-    if (this.context == "chrome") {
-      this.getCurrentWindow().location.href = aRequest.value;
-      this.sendOk();
+    if (this.context != "chrome") {
+      this.sendAsync("goUrl", aRequest);
+      return;
     }
-    this.sendAsync("goUrl", aRequest);
+
+    this.getCurrentWindow().location.href = aRequest.value;
+    let checkTimer = Cc["@mozilla.org/timer;1"].createInstance(Ci.nsITimer);
+    function checkLoad() { 
+      if (curWindow.document.readyState == "complete") { 
+        sendOk();
+        return;
+      } 
+      checkTimer.initWithCallback(checkLoad, 100, Ci.nsITimer.TYPE_ONE_SHOT);
+    }
+    checkTimer.initWithCallback(checkLoad, 100, Ci.nsITimer.TYPE_ONE_SHOT);
   },
 
   /**
@@ -1110,7 +1166,7 @@ MarionetteDriverActor.prototype = {
       }
       else {
         //don't set this pref for B2G since the framescript can be safely reused
-        prefs.setBoolPref("marionette.contentListener", false);
+        Services.prefs.setBoolPref("marionette.contentListener", false);
       }
       this.curBrowser.closeTab();
       //delete session in each frame in each browser
@@ -1132,7 +1188,39 @@ MarionetteDriverActor.prototype = {
     this.messageManager.removeMessageListener("Marionette:testLog", this);
     this.messageManager.removeMessageListener("Marionette:register", this);
     this.messageManager.removeMessageListener("Marionette:goUrl", this);
+    this.messageManager.removeMessageListener("Marionette:runEmulatorCmd", this);
     this.curBrowser = null;
+  },
+
+  _emu_cb_id: 0,
+  _emu_cbs: null,
+  runEmulatorCmd: function runEmulatorCmd(cmd, callback) {
+    if (typeof callback != "function") {
+      throw "Need to provide callback function!";
+    }
+    if (!this._emu_cbs) {
+      this._emu_cbs = {};
+    }
+    this._emu_cbs[this._emu_cb_id] = callback;
+    this.sendToClient({emulator_cmd: cmd, id: this._emu_cb_id});
+    this._emu_cb_id += 1;
+  },
+
+  emulatorCmdResult: function emulatorCmdResult(message) {
+    if (this.context != "chrome") {
+      this.sendAsync("emulatorCmdResult", message);
+      return;
+    }
+
+    let cb = this._emu_cbs[message.id];
+    delete this._emu_cbs[message.id];
+    try {
+      cb(message.result);
+    }
+    catch(e) {
+      this.sendError(e.message, e.num, e.stack);
+      return;
+    }
   },
 
   /**
@@ -1160,6 +1248,9 @@ MarionetteDriverActor.prototype = {
       case "Marionette:testLog":
         //log messages from tests
         this.marionetteLog.addLogs(message.json.value);
+        break;
+      case "Marionette:runEmulatorCmd":
+        this.sendToClient(message.json);
         break;
       case "Marionette:register":
         // This code processes the content listener's registration information
@@ -1220,7 +1311,8 @@ MarionetteDriverActor.prototype.requestTypes = {
   "getWindows":  MarionetteDriverActor.prototype.getWindows,
   "switchToFrame": MarionetteDriverActor.prototype.switchToFrame,
   "switchToWindow": MarionetteDriverActor.prototype.switchToWindow,
-  "deleteSession": MarionetteDriverActor.prototype.deleteSession
+  "deleteSession": MarionetteDriverActor.prototype.deleteSession,
+  "emulatorCmdResult": MarionetteDriverActor.prototype.emulatorCmdResult
 };
 
 /**
@@ -1319,10 +1411,8 @@ BrowserObj.prototype = {
    *        frame to load the script in
    */
   loadFrameScript: function BO_loadFrameScript(script, frame) {
-    if (!prefs.getBoolPref("marionette.contentListener")) {
-      frame.window.messageManager.loadFrameScript(script, true);
-      prefs.setBoolPref("marionette.contentListener", true);
-    }
+    frame.window.messageManager.loadFrameScript(script, true);
+    Services.prefs.setBoolPref("marionette.contentListener", true);
   },
 
   /**

@@ -118,10 +118,10 @@ MarkIdRootRange(JSTracer *trc, size_t len, jsid *vec, const char *name);
 /*** Value Marking ***/
 
 void
-MarkValue(JSTracer *trc, HeapValue *v, const char *name);
+MarkValue(JSTracer *trc, EncapsulatedValue *v, const char *name);
 
 void
-MarkValueRange(JSTracer *trc, size_t len, HeapValue *vec, const char *name);
+MarkValueRange(JSTracer *trc, size_t len, EncapsulatedValue *vec, const char *name);
 
 void
 MarkValueRoot(JSTracer *trc, Value *v, const char *name);
@@ -216,11 +216,13 @@ Mark(JSTracer *trc, HeapPtr<JSScript> *o, const char *name)
     MarkScript(trc, o, name);
 }
 
+#if JS_HAS_XML_SUPPORT
 inline void
 Mark(JSTracer *trc, HeapPtr<JSXML> *xml, const char *name)
 {
     MarkXML(trc, xml, name);
 }
+#endif
 
 inline bool
 IsMarked(const Value &v)

@@ -1,8 +1,13 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
 import datetime
 from mozprocess import ProcessHandlerMixin
 import multiprocessing
 import os
 import re
+import platform
 import shutil
 import socket
 import subprocess
@@ -32,7 +37,7 @@ class Emulator(object):
 
     deviceRe = re.compile(r"^emulator-(\d+)(\s*)(.*)$")
 
-    def __init__(self, homedir=None, noWindow=False, logcat_dir=None):
+    def __init__(self, homedir=None, noWindow=False, logcat_dir=None, arch="x86", emulatorBinary=None):
         self.port = None
         self._emulator_launched = False
         self.proc = None
@@ -42,6 +47,8 @@ class Emulator(object):
         self._adb_started = False
         self.logcat_dir = logcat_dir
         self.logcat_proc = None
+        self.arch = arch
+        self.binary = emulatorBinary
         self.battery = EmulatorBattery(self)
         self.homedir = homedir
         self.noWindow = noWindow
@@ -59,24 +66,40 @@ class Emulator(object):
         if os.access(oldstyle_homedir, os.F_OK):
             self.homedir = oldstyle_homedir
 
-        self.adb = os.path.join(self.homedir, 'out/host/linux-x86/bin/adb')
+        if self.arch not in ("x86", "arm"):
+            raise Exception("Emulator architecture must be one of x86, arm, got: %s" %
+                            self.arch)
+
+        host_dir = "linux-x86"
+        if platform.system() == "Darwin":
+            host_dir = "darwin-x86"
+
+        host_bin_dir = os.path.join("out/host", host_dir, "bin")
+
+        if self.arch == "x86":
+            binary = os.path.join(host_bin_dir, "emulator-x86")
+            kernel = "prebuilts/qemu-kernel/x86/kernel-qemu"
+            sysdir = "out/target/product/generic_x86"
+            self.tail_args = []
+        else:
+            binary = os.path.join(host_bin_dir, "emulator")
+            kernel = "prebuilts/qemu-kernel/arm/kernel-qemu-armv7"
+            sysdir = "out/target/product/generic"
+            self.tail_args = ["-cpu", "cortex-a8"]
+
+        self.adb = os.path.join(self.homedir, host_bin_dir, "adb")
         if not os.access(self.adb, os.F_OK):
             self.adb = os.path.join(self.homedir, 'bin/adb')
 
-        self.binary = os.path.join(self.homedir, 'out/host/linux-x86/bin/emulator')
-        if not os.access(self.binary, os.F_OK):
-            self.binary = os.path.join(self.homedir, 'bin/emulator')
+        if not self.binary:
+            self.binary = os.path.join(self.homedir, binary)
+
         self._check_file(self.binary)
 
-        self.kernelImg = os.path.join(self.homedir,
-                                      'prebuilts/qemu-kernel/arm/kernel-qemu-armv7')
-        if not os.access(self.kernelImg, os.F_OK):
-            self.kernelImg = os.path.join(self.homedir, 'kernel-qemu-armv7')
+        self.kernelImg = os.path.join(self.homedir, kernel)
         self._check_file(self.kernelImg)
 
-        self.sysDir = os.path.join(self.homedir, 'out/target/product/generic')
-        if not os.access(self.sysDir, os.F_OK):
-            self.sysDir = os.path.join(self.homedir, 'generic')
+        self.sysDir = os.path.join(self.homedir, sysdir)
         self._check_file(self.sysDir)
 
         self.dataImg = os.path.join(self.sysDir, 'userdata.img')
@@ -105,7 +128,7 @@ class Emulator(object):
                          '-partition-size', '512',
                          '-verbose',
                          '-skin', '480x800',
-                         '-qemu', '-cpu', 'cortex-a8'])
+                         '-qemu'] + self.tail_args)
         return qemuArgs
 
     @property
@@ -248,6 +271,10 @@ class Emulator(object):
 
         if self.logcat_dir:
             self.save_logcat()
+
+        # setup DNS fix for networking
+        self._run_adb(['-s', 'emulator-%d' % self.port,
+                       'shell', 'setprop', 'net.dns1', '10.0.2.3'])
 
     def _save_logcat_proc(self, filename, cmd):
         self.logcat_proc = LogcatProc(filename, cmd)

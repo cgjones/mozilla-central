@@ -1,39 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Bookmarks Sync.
- *
- * The Initial Developer of the Original Code is Mozilla.
- * Portions created by the Initial Developer are Copyright (C) 2007
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *  Dan Mills <thunder@mozilla.com>
- *  Richard Newman <rnewman@mozilla.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 const EXPORTED_SYMBOLS = ["XPCOMUtils", "Services", "NetUtil", "PlacesUtils",
                           "FileUtils", "Utils", "Async", "Svc", "Str"];
@@ -357,77 +324,12 @@ let Utils = {
     return Utils.encodeKeyBase32(atob(encodedKey));
   },
 
-  /**
-   * Load a json object from disk
-   *
-   * @param filePath
-   *        Json file path load from weave/[filePath].json
-   * @param that
-   *        Object to use for logging and "this" for callback
-   * @param callback
-   *        Function to process json object as its first parameter
-   */
-  jsonLoad: function Utils_jsonLoad(filePath, that, callback) {
-    filePath = "weave/" + filePath + ".json";
-    if (that._log)
-      that._log.trace("Loading json from disk: " + filePath);
-
-    let file = FileUtils.getFile("ProfD", filePath.split("/"), true);
-    if (!file.exists()) {
-      callback.call(that);
-      return;
-    }
-
-    let channel = NetUtil.newChannel(file);
-    channel.contentType = "application/json";
-
-    NetUtil.asyncFetch(channel, function (is, result) {
-      if (!Components.isSuccessCode(result)) {
-        callback.call(that);
-        return;
-      }
-      let string = NetUtil.readInputStreamToString(is, is.available());
-      is.close();
-      let json;
-      try {
-        json = JSON.parse(string);
-      } catch (ex) {
-        if (that._log)
-          that._log.debug("Failed to load json: " + Utils.exceptionStr(ex));
-      }
-      callback.call(that, json);
-    });
+  jsonLoad: function jsonLoad(path, that, callback) {
+    CommonUtils.jsonLoad("weave/" + path, that, callback);
   },
 
-  /**
-   * Save a json-able object to disk
-   *
-   * @param filePath
-   *        Json file path save to weave/[filePath].json
-   * @param that
-   *        Object to use for logging and "this" for callback
-   * @param obj
-   *        Function to provide json-able object to save. If this isn't a
-   *        function, it'll be used as the object to make a json string.
-   * @param callback
-   *        Function called when the write has been performed. Optional.
-   */
-  jsonSave: function Utils_jsonSave(filePath, that, obj, callback) {
-    filePath = "weave/" + filePath + ".json";
-    if (that._log)
-      that._log.trace("Saving json to disk: " + filePath);
-
-    let file = FileUtils.getFile("ProfD", filePath.split("/"), true);
-    let json = typeof obj == "function" ? obj.call(that) : obj;
-    let out = JSON.stringify(json);
-
-    let fos = FileUtils.openSafeFileOutputStream(file);
-    let is = this._utf8Converter.convertToInputStream(out);
-    NetUtil.asyncCopy(is, fos, function (result) {
-      if (typeof callback == "function") {
-        callback.call(that);        
-      }
-    });
+  jsonSave: function jsonSave(path, that, obj, callback) {
+    CommonUtils.jsonSave("weave/" + path, that, obj, callback);
   },
 
   getIcon: function(iconUri, defaultIcon) {

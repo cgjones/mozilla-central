@@ -1,42 +1,7 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozilla.org code.
- *
- * The Initial Developer of the Original Code is
- *   Mozilla Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2009
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Vladimir Vukicevic <vladimir@pobox.com> (original author)
- *   Mark Steele <mwsteele@gmail.com>
- *   Cedric Vivier <cedricv@neonux.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "WebGLContext.h"
 
@@ -687,7 +652,7 @@ WebGLContext::BufferSubData(GLenum target, WebGLsizeiptr byteOffset,
         return ErrorInvalidOperation("BufferData: no buffer bound!");
 
     CheckedUint32 checked_neededByteLength = CheckedUint32(byteOffset) + data->mLength;
-    if (!checked_neededByteLength.valid())
+    if (!checked_neededByteLength.isValid())
         return ErrorInvalidOperation("bufferSubData: integer overflow computing the needed byte length");
 
     if (checked_neededByteLength.value() > boundBuffer->ByteLength())
@@ -726,7 +691,7 @@ WebGLContext::BufferSubData(WebGLenum target, WebGLsizeiptr byteOffset,
         return ErrorInvalidOperation("BufferSubData: no buffer bound!");
 
     CheckedUint32 checked_neededByteLength = CheckedUint32(byteOffset) + data.mLength;
-    if (!checked_neededByteLength.valid())
+    if (!checked_neededByteLength.isValid())
         return ErrorInvalidOperation("bufferSubData: integer overflow computing the needed byte length");
 
     if (checked_neededByteLength.value() > boundBuffer->ByteLength())
@@ -941,7 +906,7 @@ WebGLContext::CopyTexSubImage2D_base(WebGLenum target,
         CheckedUint32 checked_neededByteLength = 
             GetImageSize(height, width, texelSize, mPixelStoreUnpackAlignment);
 
-        if (!checked_neededByteLength.valid())
+        if (!checked_neededByteLength.isValid())
             return ErrorInvalidOperation("%s: integer overflow computing the needed buffer size", info);
 
         PRUint32 bytesNeeded = checked_neededByteLength.value();
@@ -1562,7 +1527,7 @@ WebGLContext::DoFakeVertexAttrib0(WebGLuint vertexCount)
 
     CheckedUint32 checked_dataSize = CheckedUint32(vertexCount) * 4 * sizeof(WebGLfloat);
     
-    if (!checked_dataSize.valid()) {
+    if (!checked_dataSize.isValid()) {
         ErrorOutOfMemory("Integer overflow trying to construct a fake vertex attrib 0 array for a draw-operation "
                          "with %d vertices. Try reducing the number of vertices.", vertexCount);
         return false;
@@ -1779,7 +1744,7 @@ WebGLContext::DrawArrays(GLenum mode, WebGLint first, WebGLsizei count)
 
     CheckedInt32 checked_firstPlusCount = CheckedInt32(first) + count;
 
-    if (!checked_firstPlusCount.valid())
+    if (!checked_firstPlusCount.isValid())
         return ErrorInvalidOperation("drawArrays: overflow in first+count");
 
     if (checked_firstPlusCount.value() > maxAllowedCount)
@@ -1847,7 +1812,7 @@ WebGLContext::DrawElements(WebGLenum mode, WebGLsizei count, WebGLenum type,
         return ErrorInvalidEnum("DrawElements: type must be UNSIGNED_SHORT or UNSIGNED_BYTE");
     }
 
-    if (!checked_byteCount.valid())
+    if (!checked_byteCount.isValid())
         return ErrorInvalidValue("DrawElements: overflow in byteCount");
 
     // If there is no current program, this is silently ignored.
@@ -1863,7 +1828,7 @@ WebGLContext::DrawElements(WebGLenum mode, WebGLsizei count, WebGLenum type,
 
     CheckedUint32 checked_neededByteCount = checked_byteCount + byteOffset;
 
-    if (!checked_neededByteCount.valid())
+    if (!checked_neededByteCount.isValid())
         return ErrorInvalidOperation("DrawElements: overflow in byteOffset+byteCount");
 
     if (checked_neededByteCount.value() > mBoundElementArrayBuffer->ByteLength())
@@ -1880,7 +1845,7 @@ WebGLContext::DrawElements(WebGLenum mode, WebGLsizei count, WebGLenum type,
 
     CheckedInt32 checked_maxIndexPlusOne = CheckedInt32(maxIndex) + 1;
 
-    if (!checked_maxIndexPlusOne.valid() ||
+    if (!checked_maxIndexPlusOne.isValid() ||
         checked_maxIndexPlusOne.value() > maxAllowedCount)
     {
         // the index array contains invalid indices for the current drawing state, but they
@@ -1893,7 +1858,7 @@ WebGLContext::DrawElements(WebGLenum mode, WebGLsizei count, WebGLenum type,
 
         CheckedInt32 checked_maxIndexInSubArrayPlusOne = CheckedInt32(maxIndexInSubArray) + 1;
 
-        if (!checked_maxIndexInSubArrayPlusOne.valid() ||
+        if (!checked_maxIndexInSubArrayPlusOne.isValid() ||
             checked_maxIndexInSubArrayPlusOne.value() > maxAllowedCount)
         {
             return ErrorInvalidOperation(
@@ -3883,7 +3848,7 @@ WebGLContext::ReadPixels(WebGLint x, WebGLint y, WebGLsizei width,
     CheckedUint32 checked_alignedRowSize =
         RoundedToNextMultipleOf(checked_plainRowSize, mPixelStorePackAlignment);
 
-    if (!checked_neededByteLength.valid())
+    if (!checked_neededByteLength.isValid())
         return ErrorInvalidOperation("ReadPixels: integer overflow computing the needed buffer size");
 
     if (checked_neededByteLength.value() > dataByteLen)
@@ -5601,7 +5566,7 @@ WebGLContext::TexImage2D_base(WebGLenum target, WebGLint level, WebGLenum intern
     CheckedUint32 checked_alignedRowSize =
         RoundedToNextMultipleOf(checked_plainRowSize.value(), mPixelStoreUnpackAlignment);
 
-    if (!checked_neededByteLength.valid())
+    if (!checked_neededByteLength.isValid())
         return ErrorInvalidOperation("texImage2D: integer overflow computing the needed buffer size");
 
     PRUint32 bytesNeeded = checked_neededByteLength.value();
@@ -5842,7 +5807,7 @@ WebGLContext::TexSubImage2D_base(WebGLenum target, WebGLint level,
     CheckedUint32 checked_alignedRowSize = 
         RoundedToNextMultipleOf(checked_plainRowSize.value(), mPixelStoreUnpackAlignment);
 
-    if (!checked_neededByteLength.valid())
+    if (!checked_neededByteLength.isValid())
         return ErrorInvalidOperation("texSubImage2D: integer overflow computing the needed buffer size");
 
     PRUint32 bytesNeeded = checked_neededByteLength.value();

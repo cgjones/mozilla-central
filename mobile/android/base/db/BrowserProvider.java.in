@@ -21,6 +21,7 @@ import java.util.Random;
 import java.util.regex.Pattern;
 import java.util.regex.Matcher;
 
+import org.mozilla.gecko.GeckoAppShell;
 import org.mozilla.gecko.GeckoBackgroundThread;
 import org.mozilla.gecko.GeckoProfile;
 import org.mozilla.gecko.R;
@@ -466,7 +467,7 @@ public class BrowserProvider extends ContentProvider {
             bookmarksValues.put(Bookmarks.DATE_CREATED, now);
             bookmarksValues.put(Bookmarks.DATE_MODIFIED, now);
 
-            int pos = 1;
+            int pos = 0;
             for (int i = 0; i < fields.length; i++) {
                 String name = fields[i].getName();
                 Matcher m = p.matcher(name);
@@ -2152,6 +2153,13 @@ public class BrowserProvider extends ContentProvider {
                 // We can't set conflict resolution on API level < 8, and even
                 // above 8 it requires splitting the call per operation
                 // (insert/update/delete).
+                db.setTransactionSuccessful();
+                db.endTransaction();
+                db.beginTransaction();
+            } catch (OperationApplicationException e) {
+                // Repeat of above.
+                results[i] = new ContentProviderResult(0);
+                failures = true;
                 db.setTransactionSuccessful();
                 db.endTransaction();
                 db.beginTransaction();

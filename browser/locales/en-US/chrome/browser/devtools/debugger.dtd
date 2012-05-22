@@ -1,4 +1,8 @@
-<!-- LOCALIZATION NOTE : FILE This file contains the Script Debugger strings -->
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
+
+<!-- LOCALIZATION NOTE : FILE This file contains the Debugger strings -->
 <!-- LOCALIZATION NOTE : FILE Do not translate commandkey -->
 
 <!-- LOCALIZATION NOTE : FILE The correct localization of this file might be to
@@ -9,7 +13,7 @@
 
 <!-- LOCALIZATION NOTE (debuggerMenu.label): This is the label for the
   -  application menu item that opens the debugger UI. -->
-<!ENTITY debuggerMenu.label          "Script Debugger">
+<!ENTITY debuggerMenu.label2          "Debugger">
 
 <!-- LOCALIZATION NOTE (remoteDebuggerMenu.label): This is the label for the
   -  application menu item that opens the remote debugger UI. -->
@@ -56,3 +60,7 @@
 <!-- LOCALIZATION NOTE (debuggerUI.emptyFilterText): This is the text that
   -  appears in the filter text box when it is empty. -->
 <!ENTITY debuggerUI.emptyFilterText  "Filter scripts">
+
+<!-- LOCALIZATION NOTE (emptyScriptText): The text to display in the menulist when
+  - there are no scripts. -->
+<!ENTITY debuggerUI.emptyScriptText  "No scripts.">

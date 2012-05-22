@@ -7,6 +7,7 @@
 let Cu = Components.utils;
 let Ci = Components.interfaces;
 let Cc = Components.classes;
+Cu.import("resource://gre/modules/XPCOMUtils.jsm");
 
 function debug(msg) {
   //dump("BrowserElementChild - " + msg + "\n");
@@ -14,6 +15,10 @@ function debug(msg) {
 
 function sendAsyncMsg(msg, data) {
   sendAsyncMessage('browser-element-api:' + msg, data);
+}
+
+function sendSyncMsg(msg, data) {
+  return sendSyncMessage('browser-element-api:' + msg, data);
 }
 
 /**
@@ -41,10 +46,38 @@ BrowserElementChild.prototype = {
                                  Ci.nsIWebProgress.NOTIFY_LOCATION |
                                  Ci.nsIWebProgress.NOTIFY_STATE_WINDOW);
 
+    // A mozbrowser iframe contained inside a mozapp iframe should return false
+    // for nsWindowUtils::IsPartOfApp (unless the mozbrowser iframe is itself
+    // also mozapp).  That is, mozapp is transitive down to its children, but
+    // mozbrowser serves as a barrier.
+    //
+    // This is because mozapp iframes have some privileges which we don't want
+    // to extend to untrusted mozbrowser content.
+    //
+    // Get the app manifest from the parent, if our frame has one.
+    let appManifestURL = sendSyncMsg('get-mozapp-manifest-url')[0];
+    let windowUtils = content.QueryInterface(Ci.nsIInterfaceRequestor)
+                             .getInterface(Components.interfaces.nsIDOMWindowUtils);
+
+    if (!!appManifestURL) {
+      windowUtils.setIsApp(true);
+      windowUtils.setApp(mozApp);
+    } else {
+      windowUtils.setIsApp(false);
+    }
+
     addEventListener('DOMTitleChanged',
                      this._titleChangedHandler.bind(this),
                      /* useCapture = */ true,
                      /* wantsUntrusted = */ false);
+
+    addEventListener('DOMLinkAdded',
+                     this._iconChangedHandler.bind(this),
+                     /* useCapture = */ true,
+                     /* wantsUntrusted = */ false);
+
+    addMessageListener("browser-element-api:get-screenshot",
+                       this._recvGetScreenshot.bind(this));
   },
 
   _titleChangedHandler: function(e) {
@@ -59,6 +92,41 @@ BrowserElementChild.prototype = {
     else {
       debug("Not top level!");
     }
+  },
+
+  _iconChangedHandler: function(e) {
+    debug("Got iconchanged: (" + e.target.href + ")");
+    var hasIcon = e.target.rel.split(' ').some(function(x) {
+      return x.toLowerCase() === 'icon';
+    });
+
+    if (hasIcon) {
+      var win = e.target.ownerDocument.defaultView;
+      // Ignore iconchanges which don't come from the top-level
+      // <iframe mozbrowser> window.
+      if (win == content) {
+        sendAsyncMsg('iconchange', e.target.href);
+      }
+      else {
+        debug("Not top level!");
+      }
+    }
+  },
+
+  _recvGetScreenshot: function(data) {
+    debug("Received getScreenshot message: (" + data.json.id + ")");
+    var canvas = content.document
+      .createElementNS("http://www.w3.org/1999/xhtml", "canvas");
+    var ctx = canvas.getContext("2d");
+    canvas.mozOpaque = true;
+    canvas.height = content.innerHeight;
+    canvas.width = content.innerWidth;
+    ctx.drawWindow(content, 0, 0, content.innerWidth,
+                   content.innerHeight, "rgb(255,255,255)");
+    sendAsyncMsg('got-screenshot', {
+      id: data.json.id,
+      screenshot: canvas.toDataURL("image/png")
+    });
   },
 
   // The docShell keeps a weak reference to the progress listener, so we need

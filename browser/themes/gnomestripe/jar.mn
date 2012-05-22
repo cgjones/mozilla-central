@@ -1,3 +1,7 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
 browser.jar:
 % skin browser classic/1.0 %skin/classic/browser/
 % override chrome://global/skin/icons/warning-16.png moz-icon://stock/gtk-dialog-warning?size=menu
@@ -22,6 +26,7 @@ browser.jar:
   skin/classic/browser/identity-icons-generic.png
   skin/classic/browser/identity-icons-https.png
   skin/classic/browser/identity-icons-https-ev.png
+  skin/classic/browser/identity-icons-https-mixed.png
   skin/classic/browser/Info.png
   skin/classic/browser/KUI-close.png
   skin/classic/browser/monitor.png
@@ -145,6 +150,7 @@ browser.jar:
   skin/classic/browser/devtools/layout-background.png (devtools/layout-background.png)
   skin/classic/browser/devtools/layoutview.css        (devtools/layoutview.css)
   skin/classic/browser/devtools/layout-buttons.png    (devtools/layout-buttons.png)
+  skin/classic/browser/devtools/inspector-option-icon.png (devtools/inspector-option-icon.png)
 #ifdef MOZ_SERVICES_SYNC
   skin/classic/browser/sync-16-throbber.png
   skin/classic/browser/sync-16.png

@@ -1,40 +1,7 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is mozila.org code.
- *
- * The Initial Developer of the Original Code is
- * Mozilla Foundation
- * Portions created by the Initial Developer are Copyright (C) 2007
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Dave Camp <dcamp@mozilla.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsDOMFile.h"
 
@@ -61,8 +28,8 @@
 #include "nsIUUIDGenerator.h"
 #include "nsBlobProtocolHandler.h"
 #include "nsStringStream.h"
-#include "CheckedInt.h"
 #include "nsJSUtils.h"
+#include "mozilla/CheckedInt.h"
 #include "mozilla/Preferences.h"
 
 #include "plbase64.h"
@@ -227,7 +194,7 @@ ParseSize(PRInt64 aSize, PRInt64& aStart, PRInt64& aEnd)
     newEndOffset = aSize;
   }
 
-  if (!newStartOffset.valid() || !newEndOffset.valid() ||
+  if (!newStartOffset.isValid() || !newEndOffset.isValid() ||
       newStartOffset.value() >= newEndOffset.value()) {
     aStart = aEnd = 0;
   }
@@ -517,7 +484,7 @@ nsDOMFileFile::Initialize(nsISupports* aOwner,
                           JSContext* aCx,
                           JSObject* aObj,
                           PRUint32 aArgc,
-                          jsval* aArgv)
+                          JS::Value* aArgv)
 {
   nsresult rv;
 
@@ -533,14 +500,13 @@ nsDOMFileFile::Initialize(nsISupports* aOwner,
   // We expect to get a path to represent as a File object,
   // or an nsIFile
   nsCOMPtr<nsIFile> file;
-  if (!JSVAL_IS_STRING(aArgv[0])) {
+  if (!aArgv[0].isString()) {
     // Lets see if it's an nsIFile
-    if (!JSVAL_IS_OBJECT(aArgv[0])) {
+    if (!aArgv[0].isObject()) {
       return NS_ERROR_UNEXPECTED; // We're not interested
     }
 
-    JSObject* obj = JSVAL_TO_OBJECT(aArgv[0]);
-    NS_ASSERTION(obj, "This is a bit odd");
+    JSObject* obj = &aArgv[0].toObject();
 
     // Is it an nsIFile
     file = do_QueryInterface(
@@ -608,16 +574,7 @@ nsDOMMemoryFile::GetInternalStream(nsIInputStream **aStream)
 
 DOMCI_DATA(FileList, nsDOMFileList)
 
-NS_IMPL_CYCLE_COLLECTION_CLASS(nsDOMFileList)
-NS_IMPL_CYCLE_COLLECTION_UNLINK_BEGIN(nsDOMFileList)
-  NS_IMPL_CYCLE_COLLECTION_UNLINK_PRESERVED_WRAPPER
-NS_IMPL_CYCLE_COLLECTION_UNLINK_END
-NS_IMPL_CYCLE_COLLECTION_TRAVERSE_BEGIN(nsDOMFileList)
-  NS_IMPL_CYCLE_COLLECTION_TRAVERSE_SCRIPT_OBJECTS
-NS_IMPL_CYCLE_COLLECTION_TRAVERSE_END
-NS_IMPL_CYCLE_COLLECTION_TRACE_BEGIN(nsDOMFileList)
-  NS_IMPL_CYCLE_COLLECTION_TRACE_PRESERVED_WRAPPER
-NS_IMPL_CYCLE_COLLECTION_TRACE_END
+NS_IMPL_CYCLE_COLLECTION_WRAPPERCACHE_0(nsDOMFileList)
 
 NS_INTERFACE_MAP_BEGIN_CYCLE_COLLECTION(nsDOMFileList)
   NS_WRAPPERCACHE_INTERFACE_MAP_ENTRY
