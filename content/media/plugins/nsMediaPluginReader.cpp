@@ -287,7 +287,7 @@ bool nsMediaPluginReader::DecodeAudioData()
 
   PRUint32 frames = frame.mSize / (2 * frame.mAudioChannels);
   CheckedInt64 duration = FramesToUsecs(frames, frame.mAudioSampleRate);
-  if (!duration.valid()) {
+  if (!duration.isValid()) {
     return NS_ERROR_FAILURE;
   }
 
